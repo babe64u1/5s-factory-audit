@@ -1,0 +1,521 @@
+import React, { useState, useEffect } from 'react';
+import Layout from './components/Layout';
+import Login from './components/Login';
+import Checklist from './components/Checklist';
+import RedTag from './components/RedTag';
+import RedTagRegistry from './components/RedTagRegistry';
+import Dashboard from './components/Dashboard';
+import ActionTracker from './components/ActionTracker';
+import Schedule from './components/Schedule';
+import AdminPanel from './components/AdminPanel';
+import CompanyEmailModal from './components/CompanyEmailModal';
+import { initGoogleAuth } from './services/googleAuth';
+import { sheetsDB } from './services/googleSheets';
+import { isGoogleConfigured } from './config/google';
+
+const DEFAULT_ZONES = [
+  { id: 'zone-1', name: 'PLANT 04 - ZONE B', description: 'CNC Workshop Section B', score: 92, department: 'PRODUCTION' },
+  { id: 'zone-2', name: 'PLANT 04 - ZONE A', description: 'Logistics & Loading Dock', score: 94, department: 'LOGISTICS' },
+  { id: 'zone-3', name: 'PLANT 02 - LINE 1', description: 'Assembly Line 01', score: 79, department: 'PRODUCTION' },
+  { id: 'zone-4', name: 'WAREHOUSE - RECEIVING', description: 'Warehouse Incoming Shipments', score: 91, department: 'LOGISTICS' },
+  { id: 'zone-5', name: 'PAINT WORKSHOP', description: 'Painting and Coating Line', score: 84, department: 'PRODUCTION' },
+  { id: 'zone-6', name: 'QC-2 INSPECTION', description: 'Quality Control Station 2', score: 98, department: 'QUALITY CONTROL' },
+  { id: 'zone-7', name: 'ASSEMBLY 4', description: 'Main Assembly Conveyor 4', score: 74, department: 'PRODUCTION' },
+  { id: 'zone-8', name: 'MACHINING BLOCK', description: 'Engine Block Machining Line', score: 81, department: 'PRODUCTION' },
+  { id: 'zone-9', name: 'WELDING CELL', description: 'Robotic Welding Enclosures', score: 95, department: 'PRODUCTION' },
+  { id: 'zone-10', name: 'REWORK STATION', description: 'Post-Inspection Rework Area', score: 69, department: 'MAINTENANCE' }
+];
+
+const DEFAULT_DEPARTMENTS = [
+  { id: 'dept-1', name: 'PRODUCTION' },
+  { id: 'dept-2', name: 'MAINTENANCE' },
+  { id: 'dept-3', name: 'QUALITY CONTROL' },
+  { id: 'dept-4', name: 'LOGISTICS' },
+  { id: 'dept-5', name: 'EHS (HEALTH & SAFETY)' }
+];
+
+// Helper to load localStorage data or fall back to mock data
+const getInitialState = (key, fallback) => {
+  const data = localStorage.getItem(key);
+  return data ? JSON.parse(data) : fallback;
+};
+
+// Initial Mock Data
+const MOCK_AUDITS = [
+  { id: 'aud-1', date: '2026-06-25', auditor: 'J. MILLER', role: 'OPERATOR', zone: 'PLANT 04 - ZONE B', score: 92, answers: {} },
+  { id: 'aud-2', date: '2026-06-28', auditor: 'S. CHEN', role: 'MANAGER', zone: 'PLANT 04 - ZONE A', score: 88, answers: {} },
+  { id: 'aud-3', date: '2026-07-01', auditor: 'J. MILLER', role: 'OPERATOR', zone: 'PLANT 02 - LINE 1', score: 79, answers: {} }
+];
+
+const MOCK_RED_TAGS = [
+  { id: 'RT-40922', description: 'Damaged pallet in main aisle way blocking traffic', reason: 'misplaced', disposition: 'discard', owner: 'J. MILLER', timestamp: '2026-07-01 | 09:42 AM', status: 'Active', location: 'PLANT 04 - SECTION B - LINE 2', photo: 'captured_tag_item.jpg' },
+  { id: 'RT-11902', description: 'Unlabeled metal scrap bin near welding area', reason: 'unused', disposition: 'relocate', owner: 'S. CHEN', timestamp: '2026-07-01 | 11:15 AM', status: 'Active', location: 'PLANT 04 - SECTION B - LINE 2', photo: null }
+];
+
+const MOCK_ACTION_ITEMS = [
+  { id: 'AC-10292', title: 'Hydraulic oil leak detected on Press 04 Main Cylinder. Hazard risk high.', severity: 'CRITICAL', location: 'ZONE B - FABRICATION', assignedTo: 'J. CHEN', dueDate: '2026-07-12', status: 'TO DO', photo: true },
+  { id: 'AC-10293', title: 'Damaged floor marking at Forklift Crossing 02.', severity: 'MEDIUM', location: 'ZONE A - LOGISTICS', assignedTo: 'A. SMITH', dueDate: '2026-07-15', status: 'TO DO', photo: false },
+  { id: 'AC-10294', title: 'Shadow board tool missing at Station 04. Re-ordering metric set.', severity: 'PRIORITY', location: 'ZONE C - ASSEMBLY', assignedTo: 'R. VANCE', dueDate: '2026-07-14', status: 'IN PROGRESS', photo: true },
+  { id: 'AC-10295', title: 'Clean up spilled coolant near CNC-12.', severity: 'MEDIUM', location: 'ZONE B - MACHINING', assignedTo: 'M. HOFFMAN', dueDate: '2026-06-30', status: 'DONE', photo: false }
+];
+
+const MOCK_SCHEDULES = [
+  { id: 'SCH-1002', zone: 'PLANT 04 - ZONE B', auditor: 'J. MILLER', date: '2026-07-02', status: 'PLANNED' },
+  { id: 'SCH-1003', zone: 'PLANT 02 - LINE 1', auditor: 'S. CHEN', date: '2026-07-03', status: 'PLANNED' },
+  { id: 'SCH-1004', zone: 'PLANT 04 - ZONE A', auditor: 'J. MILLER', date: '2026-06-28', status: 'COMPLETED' },
+  { id: 'SCH-1005', zone: 'PLANT 04 - ZONE B', auditor: 'S. CHEN', date: '2026-07-01', status: 'OVERDUE' }
+];
+
+// Pre-seeded approved users (built-in legacy PIN accounts + example approved Google user)
+const DEFAULT_APPROVED_USERS = [
+  {
+    id: 'user-pin-operator',
+    name: 'J. MILLER',
+    email: null,
+    role: 'OPERATOR',
+    authType: 'PIN',
+    pin: '1234',
+    approvedAt: '2026-01-01',
+    avatar: 'JM',
+    avatarColor: '#E8472A',
+  },
+  {
+    id: 'user-pin-manager',
+    name: 'S. CHEN',
+    email: null,
+    role: 'MANAGER',
+    authType: 'PIN',
+    pin: '8888',
+    approvedAt: '2026-01-01',
+    avatar: 'SC',
+    avatarColor: '#E8472A',
+  },
+];
+
+function App() {
+  const [currentUser, setCurrentUser] = useState(() => getInitialState('5s_currentUser', null));
+  const [currentView, setCurrentView] = useState(() => getInitialState('5s_currentView', 'LOGIN'));
+  
+  const [audits, setAudits] = useState(() => getInitialState('5s_audits', MOCK_AUDITS));
+  const [redTags, setRedTags] = useState(() => getInitialState('5s_redTags', MOCK_RED_TAGS));
+  const [actionItems, setActionItems] = useState(() => getInitialState('5s_actionItems', MOCK_ACTION_ITEMS));
+  const [schedules, setSchedules] = useState(() => getInitialState('5s_schedules', MOCK_SCHEDULES));
+  const [zones, setZones] = useState(() => getInitialState('5s_zones', DEFAULT_ZONES));
+  const [departments, setDepartments] = useState(() => getInitialState('5s_departments', DEFAULT_DEPARTMENTS));
+
+  // ─── Google Services Init ────────────────────────────────────────────────
+  const [googleReady, setGoogleReady] = useState(false);
+  useEffect(() => {
+    if (isGoogleConfigured()) {
+      initGoogleAuth()
+        .then(() => setGoogleReady(true))
+        .catch(err => console.warn('Google Auth init failed (configure src/config/google.js):', err));
+    }
+  }, []);
+
+  // ─── Access Control State ───────────────────────────────────────────────────
+  const [pendingUsers, setPendingUsers] = useState(() =>
+    getInitialState('5s_pendingUsers', [])
+  );
+  const [approvedUsers, setApprovedUsers] = useState(() =>
+    getInitialState('5s_approvedUsers', DEFAULT_APPROVED_USERS)
+  );
+
+  // ─── Company Email collection (shown once after Google approval) ────────────
+  const [showCompanyEmailModal, setShowCompanyEmailModal] = useState(false);
+  const [pendingLoginUser, setPendingLoginUser] = useState(null); // approvedUser waiting for email
+
+  // Sync to local storage
+  useEffect(() => { localStorage.setItem('5s_currentUser', JSON.stringify(currentUser)); }, [currentUser]);
+  useEffect(() => { localStorage.setItem('5s_currentView', JSON.stringify(currentView)); }, [currentView]);
+  useEffect(() => { localStorage.setItem('5s_audits', JSON.stringify(audits)); }, [audits]);
+  useEffect(() => { localStorage.setItem('5s_redTags', JSON.stringify(redTags)); }, [redTags]);
+  useEffect(() => { localStorage.setItem('5s_actionItems', JSON.stringify(actionItems)); }, [actionItems]);
+  useEffect(() => { localStorage.setItem('5s_schedules', JSON.stringify(schedules)); }, [schedules]);
+  useEffect(() => { localStorage.setItem('5s_zones', JSON.stringify(zones)); }, [zones]);
+  useEffect(() => { localStorage.setItem('5s_departments', JSON.stringify(departments)); }, [departments]);
+  useEffect(() => { localStorage.setItem('5s_pendingUsers', JSON.stringify(pendingUsers)); }, [pendingUsers]);
+  useEffect(() => { localStorage.setItem('5s_approvedUsers', JSON.stringify(approvedUsers)); }, [approvedUsers]);
+
+  // Migration effect to patch older localStorage zones with default departments
+  useEffect(() => {
+    let updated = false;
+    const patchedZones = zones.map((z) => {
+      if (!z.department) {
+        updated = true;
+        // Match default department mapping
+        if (z.name.includes('ZONE B') || z.name.includes('LINE 1') || z.name.includes('ASSEMBLY') || z.name.includes('MACHINING') || z.name.includes('WELDING')) {
+          return { ...z, department: 'PRODUCTION' };
+        } else if (z.name.includes('ZONE A') || z.name.includes('RECEIVING')) {
+          return { ...z, department: 'LOGISTICS' };
+        } else if (z.name.includes('QC-2') || z.name.includes('INSPECTION')) {
+          return { ...z, department: 'QUALITY CONTROL' };
+        } else if (z.name.includes('REWORK') || z.name.includes('PAINT')) {
+          return { ...z, department: 'MAINTENANCE' };
+        }
+        return { ...z, department: 'PRODUCTION' };
+      }
+      return z;
+    });
+    if (updated) {
+      setZones(patchedZones);
+    }
+  }, [zones]);
+
+  const handleCreateZone = (newZone) => { setZones(prev => [...prev, newZone]); };
+  const handleDeleteZone = (zoneId) => { setZones(prev => prev.filter(z => z.id !== zoneId)); };
+
+  const handleCreateDepartment = (newDept) => { setDepartments(prev => [...prev, newDept]); };
+  const handleDeleteDepartment = (deptId) => { setDepartments(prev => prev.filter(d => d.id !== deptId)); };
+
+  // ─── Access Control Handlers ────────────────────────────────────────────────
+
+  /**
+   * Called when user clicks "Sign in with Google" and picks an account.
+   * Returns status: 'approved' | 'pending' | 'rejected' | 'registered'
+   */
+  const handleGoogleSignUp = (googleUserData) => {
+    const email = googleUserData.email.toLowerCase();
+
+    // Check if already approved
+    const existingApproved = approvedUsers.find(
+      (u) => u.email && u.email.toLowerCase() === email
+    );
+    if (existingApproved) {
+      return { status: 'approved', user: existingApproved };
+    }
+
+    // Check if already pending
+    const existingPending = pendingUsers.find(
+      (u) => u.email && u.email.toLowerCase() === email
+    );
+    if (existingPending) {
+      if (existingPending.status === 'REJECTED') {
+        return { status: 'rejected', user: existingPending };
+      }
+      return { status: 'pending', user: existingPending };
+    }
+
+    // Create new pending request
+    const newPending = {
+      id: `pending-${Date.now()}`,
+      name: googleUserData.name,
+      email,
+      avatar: googleUserData.avatar,
+      avatarColor: googleUserData.avatarColor,
+      googleId: googleUserData.googleId,
+      requestedAt: new Date().toISOString(),
+      status: 'PENDING',
+    };
+    setPendingUsers((prev) => [newPending, ...prev]);
+    return { status: 'registered', user: newPending };
+  };
+
+  /** Approve a pending user. Assigns role chosen by admin/manager. */
+  const handleApproveUser = (pendingId, role) => {
+    const pendingUser = pendingUsers.find((u) => u.id === pendingId);
+    if (!pendingUser) return;
+
+    const approvedUser = {
+      id: `user-google-${Date.now()}`,
+      name: pendingUser.name,
+      email: pendingUser.email,
+      role,
+      authType: 'GOOGLE',
+      googleId: pendingUser.googleId,
+      avatar: pendingUser.avatar,
+      avatarColor: pendingUser.avatarColor,
+      approvedAt: new Date().toISOString(),
+    };
+    setApprovedUsers((prev) => [approvedUser, ...prev]);
+    setPendingUsers((prev) => prev.filter((u) => u.id !== pendingId));
+  };
+
+  /** Reject a pending user (keeps them in the list as REJECTED). */
+  const handleRejectUser = (pendingId) => {
+    setPendingUsers((prev) =>
+      prev.map((u) => (u.id === pendingId ? { ...u, status: 'REJECTED' } : u))
+    );
+  };
+
+  /** Remove a rejected/pending user entirely from the list. */
+  const handleRemovePendingUser = (pendingId) => {
+    setPendingUsers((prev) => prev.filter((u) => u.id !== pendingId));
+  };
+
+  /** Revoke an approved Google user. */
+  const handleRevokeUser = (userId) => {
+    setApprovedUsers((prev) => prev.filter((u) => u.id !== userId));
+  };
+
+  // ─── View Routing ────────────────────────────────────────────────────────────
+
+  const handleLogin = (user) => {
+    setCurrentUser(user);
+    if (user.role === 'MANAGER') {
+      setCurrentView('DASHBOARD');
+    } else {
+      setCurrentView('CHECKLIST');
+    }
+  };
+
+  const handleGoogleLogin = (approvedUser) => {
+    // If this Google user doesn't yet have a company email or department, collect it first
+    if (!approvedUser.companyEmail || !approvedUser.department) {
+      setPendingLoginUser(approvedUser);
+      setShowCompanyEmailModal(true);
+      return;
+    }
+    // Already has a company email & department — go straight in
+    _enterApp(approvedUser);
+  };
+
+  /** Save company email and department to approvedUsers record, then enter the app. */
+  const handleCompanyEmailSubmit = (companyEmail, department) => {
+    const updatedUser = { ...pendingLoginUser, companyEmail, department };
+    // Persist to approvedUsers so future logins remember it
+    setApprovedUsers((prev) =>
+      prev.map((u) => (u.id === pendingLoginUser.id ? updatedUser : u))
+    );
+    setShowCompanyEmailModal(false);
+    setPendingLoginUser(null);
+    _enterApp(updatedUser);
+  };
+
+  /** Internal: set currentUser and route to the correct view. */
+  const _enterApp = (approvedUser) => {
+    setCurrentUser({
+      id: approvedUser.id,
+      name: approvedUser.name,
+      email: approvedUser.email,
+      companyEmail: approvedUser.companyEmail || null,
+      department: approvedUser.department || null,
+      role: approvedUser.role,
+      authType: 'GOOGLE',
+      avatar: approvedUser.avatar,
+      avatarColor: approvedUser.avatarColor,
+    });
+    if (approvedUser.role === 'MANAGER') {
+      setCurrentView('DASHBOARD');
+    } else {
+      setCurrentView('CHECKLIST');
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setCurrentView('LOGIN');
+  };
+
+  // ─── Audit / Data Handlers ───────────────────────────────────────────────────
+
+  const handleSubmitAudit = (auditData) => {
+    const newAudit = { ...auditData, id: `aud-${Date.now()}` };
+    setAudits(prev => [newAudit, ...prev]);
+
+    if (auditData.failedItems && auditData.failedItems.length > 0) {
+      auditData.failedItems.forEach((failed) => {
+        const actionId = `AC-${Math.floor(10000 + Math.random() * 90000)}`;
+        const newAction = {
+          id: actionId,
+          title: `[Failed 5S: ${failed.category}] ${failed.questionText}. Notes: ${failed.notes}`,
+          severity: 'CRITICAL',
+          location: auditData.zone,
+          assignedTo: 'UNASSIGNED',
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          status: 'TO DO',
+          photo: !!failed.photo
+        };
+        setActionItems(prev => [newAction, ...prev]);
+
+        if (failed.category === 'SORT') {
+          const redTagId = `RT-${Math.floor(10000 + Math.random() * 90000)}`;
+          const newRedTag = {
+            id: redTagId,
+            description: `Audit sorting failure: ${failed.questionText}. Details: ${failed.notes}`,
+            reason: 'misplaced',
+            disposition: 'needs_review',
+            owner: auditData.auditor,
+            timestamp: `${new Date().toISOString().split('T')[0]} | ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+            photo: failed.photo,
+            status: 'Active',
+            location: auditData.zone
+          };
+          setRedTags(prev => [newRedTag, ...prev]);
+        }
+      });
+    }
+
+    setSchedules(prev =>
+      prev.map(s => {
+        if (s.zone.toUpperCase().includes(auditData.zone.toUpperCase()) && s.status !== 'COMPLETED') {
+          return { ...s, status: 'COMPLETED' };
+        }
+        return s;
+      })
+    );
+
+    if (currentUser.role === 'MANAGER') {
+      setCurrentView('DASHBOARD');
+    }
+  };
+
+  const handleSubmitRedTag = (redTagData) => {
+    setRedTags(prev => [redTagData, ...prev]);
+    const actionId = `AC-${Math.floor(10000 + Math.random() * 90000)}`;
+    const newAction = {
+      id: actionId,
+      title: `Red-Tag Disposition: ${redTagData.description} (Proposed: ${redTagData.disposition})`,
+      severity: 'PRIORITY',
+      location: redTagData.location,
+      assignedTo: redTagData.owner,
+      dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      status: 'TO DO',
+      photo: !!redTagData.photo
+    };
+    setActionItems(prev => [newAction, ...prev]);
+
+    if (currentUser.role === 'MANAGER') {
+      setCurrentView('DASHBOARD');
+    } else {
+      setCurrentView('CHECKLIST');
+    }
+  };
+
+  const handleUpdateActionStatus = (itemId, nextStatus) => {
+    setActionItems(prev =>
+      prev.map(item => {
+        if (item.id === itemId) {
+          const updatedItem = { ...item, status: nextStatus };
+          if (nextStatus === 'DONE') {
+            setRedTags(prevTags =>
+              prevTags.map(tag => {
+                if (item.title.includes(tag.id) || tag.description.includes(item.title.split(' ')[0])) {
+                  return { ...tag, status: 'Resolved' };
+                }
+                return tag;
+              })
+            );
+          }
+          return updatedItem;
+        }
+        return item;
+      })
+    );
+  };
+
+  const handleCreateActionItem = (item) => { setActionItems(prev => [item, ...prev]); };
+  const handleCreateSchedule = (scheduleItem) => { setSchedules(prev => [scheduleItem, ...prev]); };
+  const handleHeatmapNewAudit = () => { setCurrentView('CHECKLIST'); };
+
+  /** Resolve a red tag — updates local state + Google Sheets if configured */
+  const handleResolveRedTag = async (tagId) => {
+    setRedTags(prev =>
+      prev.map(tag => tag.id === tagId ? { ...tag, status: 'Resolved' } : tag)
+    );
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.redTags.resolve(tagId);
+      } catch (err) {
+        console.error('Failed to sync red-tag resolve to Sheets:', err);
+      }
+    }
+  };
+
+  const activePendingCount = pendingUsers.filter((u) => u.status === 'PENDING').length;
+
+  return (
+    <>
+    <Layout
+      currentView={currentView}
+      setCurrentView={setCurrentView}
+      currentUser={currentUser}
+      onLogout={handleLogout}
+      pendingCount={activePendingCount}
+    >
+      {currentView === 'LOGIN' && (
+        <Login
+          onLogin={handleLogin}
+          onGoogleSignUp={handleGoogleSignUp}
+          onGoogleLogin={handleGoogleLogin}
+          approvedUsers={approvedUsers}
+        />
+      )}
+
+      {currentView === 'CHECKLIST' && (
+        <Checklist currentUser={currentUser} onSubmitAudit={handleSubmitAudit} zones={zones} departments={departments} />
+      )}
+
+      {currentView === 'RED_TAG' && (
+        <RedTag onSubmitRedTag={handleSubmitRedTag} />
+      )}
+
+      {currentView === 'RED_TAG_REGISTRY' && (
+        <RedTagRegistry
+          redTags={redTags}
+          onResolveRedTag={handleResolveRedTag}
+          onNewRedTag={() => setCurrentView('RED_TAG')}
+        />
+      )}
+
+      {currentView === 'DASHBOARD' && (
+        <Dashboard
+          audits={audits}
+          redTags={redTags}
+          actionItems={actionItems}
+          onNewAuditTrigger={handleHeatmapNewAudit}
+          onSelectView={setCurrentView}
+          zones={zones}
+          pendingCount={activePendingCount}
+        />
+      )}
+
+      {currentView === 'ACTIONS' && (
+        <ActionTracker
+          actionItems={actionItems}
+          onUpdateActionStatus={handleUpdateActionStatus}
+          onCreateActionItem={handleCreateActionItem}
+        />
+      )}
+
+      {currentView === 'SCHEDULE' && (
+        <Schedule
+          schedules={schedules}
+          onCreateSchedule={handleCreateSchedule}
+          onSelectView={setCurrentView}
+          zones={zones}
+        />
+      )}
+
+      {currentView === 'ADMIN' && (
+        <AdminPanel
+          zones={zones}
+          onCreateZone={handleCreateZone}
+          onDeleteZone={handleDeleteZone}
+          departments={departments}
+          onCreateDepartment={handleCreateDepartment}
+          onDeleteDepartment={handleDeleteDepartment}
+          pendingUsers={pendingUsers}
+          approvedUsers={approvedUsers}
+          onApproveUser={handleApproveUser}
+          onRejectUser={handleRejectUser}
+          onRemovePendingUser={handleRemovePendingUser}
+          onRevokeUser={handleRevokeUser}
+          currentUser={currentUser}
+        />
+      )}
+    </Layout>
+
+    {/* Company Email collection modal — shown once after first Google approval login */}
+    {showCompanyEmailModal && pendingLoginUser && (
+      <CompanyEmailModal
+        user={pendingLoginUser}
+        departments={departments}
+        onSubmit={handleCompanyEmailSubmit}
+      />
+    )}
+  </>
+  );
+}
+
+export default App;
