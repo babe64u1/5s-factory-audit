@@ -386,9 +386,12 @@ function App() {
 
     // Save to Google Sheets — token is active right now (operator just signed in with Google)
     if (isGoogleConfigured()) {
-      sheetsDB.usersPending.add(newPending).catch(err =>
-        console.error('Failed to save pending user to Sheets:', err)
-      );
+      sheetsDB.usersPending.add(newPending).catch(err => {
+        console.error('Failed to save pending user to Sheets:', err);
+        alert('ERROR SAVING TO GOOGLE SHEETS: ' + err.message + '\n\nPlease tell the manager to make sure the Spreadsheet is shared as "Anyone with the link can EDIT".');
+      });
+    } else {
+      alert('WARNING: Google Sheets is not fully configured (missing Spreadsheet ID or Drive ID in Vercel). Saving to local storage only.');
     }
 
     return { status: 'registered', user: newPending };
