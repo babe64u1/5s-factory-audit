@@ -5,6 +5,7 @@ import Checklist from './components/Checklist';
 import RedTag from './components/RedTag';
 import RedTagRegistry from './components/RedTagRegistry';
 import Dashboard from './components/Dashboard';
+import SafetyDashboard from './components/SafetyDashboard';
 import ActionTracker from './components/ActionTracker';
 import Schedule from './components/Schedule';
 import AdminPanel from './components/AdminPanel';
@@ -849,6 +850,10 @@ function App() {
           zones={zones}
           pendingCount={activePendingCount}
         />
+      )}
+
+      {currentView === 'SAFETY_DASHBOARD' && (
+        <SafetyDashboard />
       )}
 
       {currentView === 'ACTIONS' && (

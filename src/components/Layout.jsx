@@ -62,6 +62,7 @@ export default function Layout({
   const navItems = isManager
     ? [
         { id: 'DASHBOARD',       label: 'Dashboard',          icon: 'dashboard' },
+        { id: 'SAFETY_DASHBOARD',label: 'Safety Dashboard',   icon: 'health_and_safety' },
         { id: 'CHECKLIST',       label: 'Audit Checklist',    icon: 'fact_check' },
         { id: 'RED_TAG',         label: 'Red-Tag Flow',       icon: 'label_important' },
         { id: 'RED_TAG_REGISTRY',label: 'Red-Tag Registry',   icon: 'local_offer' },
