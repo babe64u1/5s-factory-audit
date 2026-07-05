@@ -693,6 +693,7 @@ function App() {
 
   const handleConnectGoogle = async () => {
     try {
+      await initGoogleAuth();
       await signInWithGoogle();
       setGoogleTokenActive(true);
       alert('Google Sheets database synced successfully!');
