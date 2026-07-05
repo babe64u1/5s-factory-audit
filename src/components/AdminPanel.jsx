@@ -125,12 +125,12 @@ export default function AdminPanel({
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex gap-1 p-1 bg-[#F4F4F6] border border-[#E0E0EC] rounded-xl mb-6 w-fit">
+      <div className="flex gap-1 p-1 bg-[#F4F4F6] border border-[#E0E0EC] rounded-xl mb-6 w-full overflow-x-auto whitespace-nowrap hide-scrollbar">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all ${
+            className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all ${
               activeTab === tab.id
                 ? 'bg-[#353750] text-white shadow-md'
                 : 'text-[#6B6E8A] hover:text-[#353750] hover:bg-white'
@@ -152,7 +152,7 @@ export default function AdminPanel({
         <div className="flex flex-col gap-6">
           {/* Pending Requests */}
           <div className="bg-white border border-[#E0E0EC] rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-[#E0E0EC] flex items-center justify-between">
+            <div className="p-4 border-b border-[#E0E0EC] flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-[#F05731] text-xl">hourglass_top</span>
                 <h2 className="font-bold text-[#353750] uppercase text-sm tracking-wide">Pending Requests</h2>
