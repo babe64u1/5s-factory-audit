@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { uploadPhoto } from '../services/googleDrive';
+import { isGoogleConfigured } from '../config/google';
 
 const QUESTIONS = {
   SORT: [
@@ -27,10 +29,16 @@ export default function Checklist({ currentUser, onSubmitAudit, zones = [], depa
   const [openSections, setOpenSections] = useState({ SORT: true });
   const [answers, setAnswers] = useState({});
   const [notes, setNotes] = useState({});
-  const [photos, setPhotos] = useState({});
+  const [photos, setPhotos] = useState({}); // { qId: [{ url, id, localUrl }] }
   const [score, setScore] = useState(0);
   const [selectedZone, setSelectedZone] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
+
+  // Real Upload State
+  const [activeQId, setActiveQId] = useState(null);
+  const [uploadingQIds, setUploadingQIds] = useState({}); // { qId: true/false }
+
+  const fileInputRef = useRef(null);
 
   // Set default selected zone and auto-update department based on selected zone PIC
   useEffect(() => {
@@ -57,27 +65,66 @@ export default function Checklist({ currentUser, onSubmitAudit, zones = [], depa
     setNotes((prev) => ({ ...prev, [qId]: val }));
   };
 
-  const handlePhotoCapture = (qId) => {
+  const handlePhotoCaptureTrigger = (qId) => {
     const currentPhotos = photos[qId] || [];
     if (currentPhotos.length >= 10) {
       alert('Maximum of 10 pictures allowed per item.');
       return;
     }
+    setActiveQId(qId);
+    fileInputRef.current?.click();
+  };
 
-    // Simulate photo capture
-    const flash = document.createElement('div');
-    flash.className = 'fixed inset-0 z-50 bg-white pointer-events-none opacity-0';
-    document.body.appendChild(flash);
-    flash.animate([{ opacity: 0.8 }, { opacity: 0 }], { duration: 150 });
-    setTimeout(() => flash.remove(), 200);
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    const qId = activeQId;
+    if (!file || !qId) return;
 
-    const newPhotoNum = currentPhotos.length + 1;
-    const newPhoto = `evidence_photo_${qId}_${newPhotoNum}.jpg`;
+    // Reset file input value so same file can be selected again if deleted
+    e.target.value = '';
 
-    setPhotos((prev) => ({
+    setUploadingQIds(prev => ({ ...prev, [qId]: true }));
+
+    const previewUrl = URL.createObjectURL(file);
+    const newPhotoNum = (photos[qId] || []).length + 1;
+    const tempPhoto = { url: previewUrl, id: '', localUrl: previewUrl, uploading: true };
+
+    // Optimistically show preview
+    setPhotos(prev => ({
       ...prev,
-      [qId]: [...currentPhotos, newPhoto]
+      [qId]: [...(prev[qId] || []), tempPhoto]
     }));
+
+    try {
+      let finalUrl = previewUrl;
+      let fileId = '';
+
+      if (isGoogleConfigured()) {
+        const result = await uploadPhoto(file, `Evidence_${qId}_${newPhotoNum}_${Date.now()}.jpg`);
+        finalUrl = result.viewUrl;
+        fileId = result.fileId;
+      }
+
+      setPhotos(prev => ({
+        ...prev,
+        [qId]: (prev[qId] || []).map(p => 
+          p.localUrl === previewUrl 
+            ? { url: finalUrl, id: fileId, localUrl: previewUrl, uploading: false } 
+            : p
+        )
+      }));
+    } catch (err) {
+      console.error('Drive upload failed for checklist evidence:', err);
+      alert('Failed to upload image. Please try again: ' + err.message);
+      // Remove failed photo from preview
+      setPhotos(prev => ({
+        ...prev,
+        [qId]: (prev[qId] || []).filter(p => p.localUrl !== previewUrl)
+      }));
+    } finally {
+      setUploadingQIds(prev => ({ ...prev, [qId]: false }));
+      setActiveQId(null);
+    }
   };
 
   const handlePhotoDelete = (qId, photoIndex) => {
@@ -324,16 +371,22 @@ export default function Checklist({ currentUser, onSubmitAudit, zones = [], depa
                                 {/* Photo Thumbnail Grid */}
                                 <div className="grid grid-cols-5 gap-2 bg-surface-container-lowest p-2 border border-border-gray min-h-[70px] rounded">
                                   {photoVal.map((img, idx) => (
-                                    <div key={idx} className="relative aspect-square border border-border-gray rounded bg-surface-container-high group overflow-hidden flex items-center justify-center">
-                                      <span className="material-symbols-outlined text-secondary text-2xl">photo_library</span>
-                                      <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-center text-text-secondary font-mono">
-                                        #{idx + 1}
-                                      </span>
+                                    <div key={idx} className="relative aspect-square border border-[#E0E0EC] rounded bg-[#F4F4F6] group overflow-hidden flex items-center justify-center">
+                                      {img.uploading ? (
+                                        <div className="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
+                                      ) : (
+                                        <img src={img.url} className="w-full h-full object-cover" alt={`Evidence ${idx}`} />
+                                      )}
+                                      {!img.uploading && (
+                                        <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-center text-white font-mono">
+                                          #{idx + 1}
+                                        </span>
+                                      )}
                                       {/* Hover Action Overlay to Delete */}
                                       <button
                                         type="button"
                                         onClick={() => handlePhotoDelete(q.id, idx)}
-                                        className="absolute inset-0 bg-black/75 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-safety-red"
+                                        className="absolute inset-0 bg-black/75 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-red-500"
                                       >
                                         <span className="material-symbols-outlined text-lg">delete</span>
                                       </button>
@@ -344,8 +397,8 @@ export default function Checklist({ currentUser, onSubmitAudit, zones = [], depa
                                   {photoVal.length < 10 && (
                                     <button
                                       type="button"
-                                      onClick={() => handlePhotoCapture(q.id)}
-                                      className="aspect-square border-2 border-dashed border-border-gray hover:border-primary-container flex flex-col items-center justify-center text-secondary hover:text-primary transition-all rounded bg-surface-container-lowest"
+                                      onClick={() => handlePhotoCaptureTrigger(q.id)}
+                                      className="aspect-square border-2 border-dashed border-[#E0E0EC] hover:border-[#353750] flex flex-col items-center justify-center text-[#6B6E8A] hover:text-[#353750] transition-all rounded bg-white"
                                     >
                                       <span className="material-symbols-outlined text-lg">add_a_photo</span>
                                     </button>
@@ -353,7 +406,7 @@ export default function Checklist({ currentUser, onSubmitAudit, zones = [], depa
                                 </div>
                                 
                                 {photoVal.length < 5 && (
-                                  <p className="text-[10px] text-safety-red uppercase font-bold flex items-center gap-1">
+                                  <p className="text-[10px] text-red-500 uppercase font-bold flex items-center gap-1">
                                     <span className="material-symbols-outlined text-xs">warning</span>
                                     Must upload at least 5 photos before submission (Current: {photoVal.length})
                                   </p>
@@ -389,6 +442,16 @@ export default function Checklist({ currentUser, onSubmitAudit, zones = [], depa
           </p>
         </div>
       </main>
+
+      {/* Single hidden input for camera/gallery capture */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+      />
     </div>
   );
 }

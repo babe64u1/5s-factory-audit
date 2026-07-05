@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { uploadPhoto } from '../services/googleDrive';
+import { isGoogleConfigured } from '../config/google';
 
 /**
  * RedTag Component
@@ -10,22 +12,54 @@ export default function RedTag({ onSubmitRedTag }) {
   const [reason, setReason] = useState('');
   const [disposition, setDisposition] = useState('');
   const [owner, setOwner] = useState('');
-  const [photo, setPhoto] = useState(null);
+  
+  // Real Photo Upload state
+  const [photo, setPhoto] = useState(null); // Local Preview ObjectURL / DataURL
+  const [photoUrl, setPhotoUrl] = useState(''); // Google Drive URL
+  const [photoId, setPhotoId] = useState(''); // Google Drive File ID
+  const [uploading, setUploading] = useState(false);
+
+  const fileInputRef = useRef(null);
+
   const [tagId] = useState(() => `RT-${Math.floor(10000 + Math.random() * 90000)}`);
   const [timestamp] = useState(() => {
     const d = new Date();
     return `${d.toISOString().split('T')[0]} | ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   });
 
-  const handleCapturePhoto = () => {
-    // Flash effect
-    const flash = document.createElement('div');
-    flash.className = 'fixed inset-0 z-50 bg-white pointer-events-none opacity-0';
-    document.body.appendChild(flash);
-    flash.animate([{ opacity: 0.8 }, { opacity: 0 }], { duration: 150 });
-    setTimeout(() => flash.remove(), 200);
+  const handleContainerClick = () => {
+    if (uploading) return;
+    fileInputRef.current?.click();
+  };
 
-    setPhoto('captured_tag_item.jpg');
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+
+    // Create local object URL for instant preview
+    const previewUrl = URL.createObjectURL(file);
+    setPhoto(previewUrl);
+
+    try {
+      if (isGoogleConfigured()) {
+        const result = await uploadPhoto(file, `RT_${tagId}_${Date.now()}.jpg`);
+        setPhotoUrl(result.viewUrl);
+        setPhotoId(result.fileId);
+      } else {
+        // Fallback for mock/local demo mode
+        setPhotoUrl(previewUrl);
+      }
+    } catch (err) {
+      console.error('Drive photo upload failed:', err);
+      alert('Photo upload failed. Please try again: ' + err.message);
+      setPhoto(null);
+      setPhotoUrl('');
+      setPhotoId('');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleFinalize = () => {
@@ -49,7 +83,8 @@ export default function RedTag({ onSubmitRedTag }) {
       disposition,
       owner: owner.trim() || 'UNASSIGNED',
       timestamp,
-      photo,
+      photoUrl: photoUrl || photo || '',
+      photoId: photoId || '',
       status: 'Active',
       location: 'PLANT 04 - SECTION B - LINE 2'
     };
@@ -63,6 +98,8 @@ export default function RedTag({ onSubmitRedTag }) {
     setDisposition('');
     setOwner('');
     setPhoto(null);
+    setPhotoUrl('');
+    setPhotoId('');
   };
 
   return (
@@ -86,33 +123,56 @@ export default function RedTag({ onSubmitRedTag }) {
 
       {/* ── Photo Capture Area ─────────────────────────────────────────────── */}
       <section className="mb-6">
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          className="hidden"
+        />
+
         <div 
-          onClick={handleCapturePhoto}
+          onClick={handleContainerClick}
           className="relative group cursor-pointer border-2 border-dashed border-[#E0E0EC] bg-white aspect-video md:aspect-[21/9] flex flex-col items-center justify-center transition-all hover:border-[#353750]/50 overflow-hidden rounded-2xl shadow-sm"
         >
           <div className="absolute inset-0 z-0">
-            <div 
-              className="w-full h-full bg-cover bg-center grayscale opacity-10" 
-              style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBTXIaPBDEN3xA1fq8G77o9eqT2IiH0OAN4vlWAvmxR6XizZJN1iDD3J7dGBt8h15q-sRItiAXdFde5sYsgd-WFbjEOuTog9FIKwld3EBTFECPTNBrPNyp6GXQQcEHWihiZAYGVd40D3Qy2z_tZIvr8YHMSWGUXXlf2Qn2jGTBkHFB4PBBOwFAus2q5Ct6eIWxRmKMdqxehhAQn6WTW45yb4atqbHPgYxpGYkF-HokhVtiYDAlyGtaD3tRvXj4l3bOdDbfCRfITfPTn')" }}
-            />
+            {photo ? (
+              <img
+                src={photo}
+                alt="Preview"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div 
+                className="w-full h-full bg-cover bg-center grayscale opacity-10" 
+                style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBTXIaPBDEN3xA1fq8G77o9eqT2IiH0OAN4vlWAvmxR6XizZJN1iDD3J7dGBt8h15q-sRItiAXdFde5sYsgd-WFbjEOuTog9FIKwld3EBTFECPTNBrPNyp6GXQQcEHWihiZAYGVd40D3Qy2z_tZIvr8YHMSWGUXXlf2Qn2jGTBkHFB4PBBOwFAus2q5Ct6eIWxRmKMdqxehhAQn6WTW45yb4atqbHPgYxpGYkF-HokhVtiYDAlyGtaD3tRvXj4l3bOdDbfCRfITfPTn')" }}
+              />
+            )}
           </div>
-          <div className="relative z-10 flex flex-col items-center text-center px-4">
+          <div className="relative z-10 flex flex-col items-center text-center px-4 bg-white/70 backdrop-blur-[2px] py-4 rounded-xl border border-white/20">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-3 shadow-md transition-transform group-hover:scale-105 ${
-              photo ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFF5F3] text-[#F05731]'
+              uploading ? 'bg-amber-100 text-amber-600' : photo ? 'bg-[#E8F5E9] text-[#2E7D32]' : 'bg-[#FFF5F3] text-[#F05731]'
             }`}>
-              <span className="material-symbols-outlined text-3xl">
-                {photo ? 'photo_library' : 'photo_camera'}
-              </span>
+              {uploading ? (
+                <div className="w-8 h-8 border-4 border-amber-600 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <span className="material-symbols-outlined text-3xl">
+                  {photo ? 'check_circle' : 'photo_camera'}
+                </span>
+              )}
             </div>
             <p className="text-lg font-bold text-[#353750] uppercase tracking-wide">
-              {photo ? 'Photo Captured Successfully' : 'Capture Red-Tag Item'}
+              {uploading ? 'Uploading to Drive...' : photo ? 'Photo Ready' : 'Capture Red-Tag Item'}
             </p>
             <p className="text-xs text-[#6B6E8A] uppercase mt-1">
-              {photo ? 'Click to recapture item' : 'Tap to open industrial camera'}
+              {uploading ? 'Please wait' : photo ? 'Tap to change/recapture photo' : 'Tap to open camera / gallery'}
             </p>
           </div>
-          {/* Scanning animation effect */}
-          <div className="absolute top-0 left-0 w-full h-0.5 bg-[#F05731] opacity-40 animate-[bounce_3s_infinite]" />
+          {/* Scanning animation effect (only when not loaded or uploading) */}
+          {!photo && !uploading && (
+            <div className="absolute top-0 left-0 w-full h-0.5 bg-[#F05731] opacity-40 animate-[bounce_3s_infinite]" />
+          )}
         </div>
       </section>
 

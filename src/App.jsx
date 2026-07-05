@@ -113,6 +113,69 @@ function App() {
     }
   }, []);
 
+  // Fetch all data from Google Sheets when authenticated
+  useEffect(() => {
+    if (googleReady && currentUser?.authType === 'GOOGLE') {
+      const loadSheetsDatabase = async () => {
+        try {
+          // 1. Initialize headers on empty tabs
+          await sheetsDB.initializeAllHeaders();
+
+          // 2. Fetch all databases in parallel
+          const [
+            sheetAudits,
+            sheetRedTags,
+            sheetActions,
+            sheetSchedules,
+            sheetZones,
+            sheetDepts,
+            sheetApproved,
+            sheetPending
+          ] = await Promise.all([
+            sheetsDB.audits.getAll(),
+            sheetsDB.redTags.getAll(),
+            sheetsDB.actionItems.getAll(),
+            sheetsDB.schedules.getAll(),
+            sheetsDB.zones.getAll(),
+            sheetsDB.departments.getAll(),
+            sheetsDB.usersApproved.getAll(),
+            sheetsDB.usersPending.getAll()
+          ]);
+
+          // 3. Populate state if sheets contain data
+          if (sheetAudits.length > 0) setAudits(sheetAudits);
+          
+          if (sheetRedTags.length > 0) {
+            setRedTags(sheetRedTags.map(tag => ({
+              ...tag,
+              // convert status to proper case
+              status: tag.status || 'Active'
+            })));
+          }
+          
+          if (sheetActions.length > 0) setActionItems(sheetActions);
+          if (sheetSchedules.length > 0) setSchedules(sheetSchedules);
+          
+          if (sheetZones.length > 0) {
+            setZones(sheetZones.map(z => ({
+              ...z,
+              score: parseInt(z.score || '0', 10)
+            })));
+          }
+          
+          if (sheetDepts.length > 0) setDepartments(sheetDepts);
+          if (sheetApproved.length > 0) setApprovedUsers(sheetApproved);
+          if (sheetPending.length > 0) setPendingUsers(sheetPending);
+
+          console.log('Successfully synced database with Google Sheets.');
+        } catch (err) {
+          console.error('Failed to load Google Sheets database:', err);
+        }
+      };
+      loadSheetsDatabase();
+    }
+  }, [googleReady, currentUser]);
+
   // ─── Access Control State ───────────────────────────────────────────────────
   const [pendingUsers, setPendingUsers] = useState(() =>
     getInitialState('5s_pendingUsers', [])
@@ -309,13 +372,35 @@ function App() {
 
   // ─── Audit / Data Handlers ───────────────────────────────────────────────────
 
-  const handleSubmitAudit = (auditData) => {
+  // ─── Audit / Data Handlers ───────────────────────────────────────────────────
+
+  const handleSubmitAudit = async (auditData) => {
     const newAudit = { ...auditData, id: `aud-${Date.now()}` };
     setAudits(prev => [newAudit, ...prev]);
 
+    // Save to Google Sheets if ready
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.audits.add({
+          id: newAudit.id,
+          date: newAudit.date,
+          auditor: newAudit.auditor,
+          role: newAudit.role,
+          zone: newAudit.zone,
+          score: newAudit.score,
+          answers: JSON.stringify(newAudit.answers),
+          notes: JSON.stringify(newAudit.failedItems.map(f => ({ qId: f.qId, notes: f.notes })))
+        });
+      } catch (err) {
+        console.error('Failed to save audit to Sheets:', err);
+      }
+    }
+
     if (auditData.failedItems && auditData.failedItems.length > 0) {
-      auditData.failedItems.forEach((failed) => {
+      auditData.failedItems.forEach(async (failed) => {
         const actionId = `AC-${Math.floor(10000 + Math.random() * 90000)}`;
+        const firstPhotoUrl = failed.photos?.[0]?.url || '';
+        
         const newAction = {
           id: actionId,
           title: `[Failed 5S: ${failed.category}] ${failed.questionText}. Notes: ${failed.notes}`,
@@ -324,9 +409,17 @@ function App() {
           assignedTo: 'UNASSIGNED',
           dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           status: 'TO DO',
-          photo: !!failed.photo
+          photoUrl: firstPhotoUrl
         };
         setActionItems(prev => [newAction, ...prev]);
+
+        if (googleReady && isGoogleConfigured()) {
+          try {
+            await sheetsDB.actionItems.add(newAction);
+          } catch (err) {
+            console.error('Failed to save action item to Sheets:', err);
+          }
+        }
 
         if (failed.category === 'SORT') {
           const redTagId = `RT-${Math.floor(10000 + Math.random() * 90000)}`;
@@ -337,19 +430,35 @@ function App() {
             disposition: 'needs_review',
             owner: auditData.auditor,
             timestamp: `${new Date().toISOString().split('T')[0]} | ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-            photo: failed.photo,
+            photoUrl: firstPhotoUrl,
+            photoId: failed.photos?.[0]?.id || '',
             status: 'Active',
             location: auditData.zone
           };
           setRedTags(prev => [newRedTag, ...prev]);
+
+          if (googleReady && isGoogleConfigured()) {
+            try {
+              await sheetsDB.redTags.add(newRedTag);
+            } catch (err) {
+              console.error('Failed to save red tag to Sheets:', err);
+            }
+          }
         }
       });
     }
 
     setSchedules(prev =>
       prev.map(s => {
-        if (s.zone.toUpperCase().includes(auditData.zone.toUpperCase()) && s.status !== 'COMPLETED') {
-          return { ...s, status: 'COMPLETED' };
+        const isMatched = s.zone.toUpperCase().includes(auditData.zone.toUpperCase()) && s.status !== 'COMPLETED';
+        if (isMatched) {
+          const updated = { ...s, status: 'COMPLETED' };
+          if (googleReady && isGoogleConfigured()) {
+            sheetsDB.schedules.updateStatus(s.id, 'COMPLETED').catch(err =>
+              console.error('Failed to update schedule status in Sheets:', err)
+            );
+          }
+          return updated;
         }
         return s;
       })
@@ -360,8 +469,17 @@ function App() {
     }
   };
 
-  const handleSubmitRedTag = (redTagData) => {
+  const handleSubmitRedTag = async (redTagData) => {
     setRedTags(prev => [redTagData, ...prev]);
+
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.redTags.add(redTagData);
+      } catch (err) {
+        console.error('Failed to save red tag to Sheets:', err);
+      }
+    }
+
     const actionId = `AC-${Math.floor(10000 + Math.random() * 90000)}`;
     const newAction = {
       id: actionId,
@@ -371,9 +489,17 @@ function App() {
       assignedTo: redTagData.owner,
       dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       status: 'TO DO',
-      photo: !!redTagData.photo
+      photoUrl: redTagData.photoUrl || ''
     };
     setActionItems(prev => [newAction, ...prev]);
+
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.actionItems.add(newAction);
+      } catch (err) {
+        console.error('Failed to save action item to Sheets:', err);
+      }
+    }
 
     if (currentUser.role === 'MANAGER') {
       setCurrentView('DASHBOARD');
@@ -382,7 +508,7 @@ function App() {
     }
   };
 
-  const handleUpdateActionStatus = (itemId, nextStatus) => {
+  const handleUpdateActionStatus = async (itemId, nextStatus) => {
     setActionItems(prev =>
       prev.map(item => {
         if (item.id === itemId) {
@@ -390,8 +516,15 @@ function App() {
           if (nextStatus === 'DONE') {
             setRedTags(prevTags =>
               prevTags.map(tag => {
-                if (item.title.includes(tag.id) || tag.description.includes(item.title.split(' ')[0])) {
-                  return { ...tag, status: 'Resolved' };
+                const isMatch = item.title.includes(tag.id) || tag.description.includes(item.title.split(' ')[0]);
+                if (isMatch) {
+                  const resolvedTag = { ...tag, status: 'Resolved' };
+                  if (googleReady && isGoogleConfigured()) {
+                    sheetsDB.redTags.resolve(tag.id).catch(err =>
+                      console.error('Failed to resolve red tag in Sheets:', err)
+                    );
+                  }
+                  return resolvedTag;
                 }
                 return tag;
               })
@@ -402,10 +535,38 @@ function App() {
         return item;
       })
     );
+
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.actionItems.updateStatus(itemId, nextStatus);
+      } catch (err) {
+        console.error('Failed to update action status in Sheets:', err);
+      }
+    }
   };
 
-  const handleCreateActionItem = (item) => { setActionItems(prev => [item, ...prev]); };
-  const handleCreateSchedule = (scheduleItem) => { setSchedules(prev => [scheduleItem, ...prev]); };
+  const handleCreateActionItem = async (item) => {
+    setActionItems(prev => [item, ...prev]);
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.actionItems.add(item);
+      } catch (err) {
+        console.error('Failed to save custom action item to Sheets:', err);
+      }
+    }
+  };
+
+  const handleCreateSchedule = async (scheduleItem) => {
+    setSchedules(prev => [scheduleItem, ...prev]);
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.schedules.add(scheduleItem);
+      } catch (err) {
+        console.error('Failed to save schedule to Sheets:', err);
+      }
+    }
+  };
+
   const handleHeatmapNewAudit = () => { setCurrentView('CHECKLIST'); };
 
   /** Resolve a red tag — updates local state + Google Sheets if configured */
