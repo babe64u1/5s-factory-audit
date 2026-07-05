@@ -65,7 +65,7 @@ export default function Layout({
         { id: 'CHECKLIST',       label: 'Audit Checklist',    icon: 'fact_check' },
         { id: 'RED_TAG',         label: 'Red-Tag Flow',       icon: 'label_important' },
         { id: 'RED_TAG_REGISTRY',label: 'Red-Tag Registry',   icon: 'local_offer' },
-        { id: 'ACTIONS',         label: 'Action Tracker',     icon: 'plumbing' },
+        { id: 'ACTIONS',         label: 'Findings Follow-Up', icon: 'plumbing' },
         { id: 'SCHEDULE',        label: 'Audit Schedule',     icon: 'calendar_month' },
         { id: 'ADMIN',           label: 'Admin Settings',     icon: 'settings' },
       ]

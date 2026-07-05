@@ -569,7 +569,7 @@ function App() {
 
   // ─── Audit / Data Handlers ───────────────────────────────────────────────────
 
-  const handleSubmitAudit = async (auditData) => {
+  const handleSubmitAudit = async (auditData, newFindings = []) => {
     const newAudit = { ...auditData, id: `aud-${Date.now()}` };
     setAudits(prev => [newAudit, ...prev]);
 
@@ -591,33 +591,26 @@ function App() {
       }
     }
 
-    if (auditData.failedItems && auditData.failedItems.length > 0) {
-      auditData.failedItems.forEach(async (failed) => {
-        const actionId = `AC-${Math.floor(10000 + Math.random() * 90000)}`;
-        const firstPhotoUrl = failed.photos?.[0]?.url || '';
-        
-        const newAction = {
-          id: actionId,
-          title: `[Failed 5S: ${failed.category}] ${failed.questionText}. Notes: ${failed.notes}`,
-          severity: 'CRITICAL',
-          location: auditData.zone,
-          assignedTo: 'UNASSIGNED',
-          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          status: 'TO DO',
-          photoUrl: firstPhotoUrl
-        };
-        setActionItems(prev => [newAction, ...prev]);
+    if (newFindings.length > 0) {
+      // 1. Process Findings (Action Items)
+      const findingsWithAuditId = newFindings.map(f => ({ ...f, auditId: newAudit.id }));
+      setActionItems(prev => [...findingsWithAuditId, ...prev]);
 
-        if (googleReady && isGoogleConfigured()) {
+      if (googleReady && isGoogleConfigured()) {
+        findingsWithAuditId.forEach(async (finding) => {
           try {
-            await sheetsDB.actionItems.add(newAction);
+            await sheetsDB.actionItems.add(finding);
           } catch (err) {
-            console.error('Failed to save action item to Sheets:', err);
+            console.error('Failed to save finding to Sheets:', err);
           }
-        }
+        });
+      }
 
+      // 2. Also generate Red Tags if the finding was for the SORT category
+      auditData.failedItems.forEach(async (failed) => {
         if (failed.category === 'SORT') {
           const redTagId = `RT-${Math.floor(10000 + Math.random() * 90000)}`;
+          const firstPhotoUrl = failed.photos?.[0]?.url || '';
           const newRedTag = {
             id: redTagId,
             description: `Audit sorting failure: ${failed.questionText}. Details: ${failed.notes}`,

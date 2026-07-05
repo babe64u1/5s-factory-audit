@@ -75,11 +75,18 @@ export default function ActionTracker({ actionItems, onUpdateActionStatus, onCre
           {item.title}
         </div>
 
-        {item.photo && (
-          <div className="industrial-border relative w-full aspect-video overflow-hidden border border-border-gray rounded bg-black flex items-center justify-center">
-            {/* Display placeholder image or simulated graphic */}
-            <span className="material-symbols-outlined text-secondary text-4xl opacity-35">photo_library</span>
-            <div className="absolute bottom-1 right-1 bg-black/60 px-1 text-[8px] text-text-secondary">EVIDENCE FILE</div>
+        {item.pillar && (
+          <div className="flex items-center gap-1 mt-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-primary border border-primary/30 bg-primary-container/20 px-1.5 py-0.5 rounded">
+              {item.pillar}
+            </span>
+          </div>
+        )}
+
+        {item.photoUrl && (
+          <div className="industrial-border relative w-full aspect-video overflow-hidden border border-border-gray rounded bg-black flex items-center justify-center mt-2">
+            <img src={item.photoUrl} alt="Evidence" className="w-full h-full object-cover opacity-80" />
+            <div className="absolute bottom-1 right-1 bg-black/60 px-1 text-[8px] text-white">EVIDENCE FILE</div>
           </div>
         )}
 
@@ -143,7 +150,7 @@ export default function ActionTracker({ actionItems, onUpdateActionStatus, onCre
           <div className="flex-1 flex flex-col bg-surface-container-low border border-border-gray p-3 rounded">
             <div className="flex items-center justify-between mb-4 px-2 py-2 border-b-2 border-safety-orange">
               <h3 className="font-headline-md text-headline-md uppercase tracking-widest text-on-surface flex items-center gap-2">
-                TO DO
+                OPEN FINDINGS
                 <span className="text-label-sm bg-surface-variant px-2 py-0.5 rounded text-secondary text-xs">
                   {todoItems.length}
                 </span>
@@ -151,6 +158,7 @@ export default function ActionTracker({ actionItems, onUpdateActionStatus, onCre
               <button 
                 onClick={() => setShowCreateModal(true)}
                 className="text-primary hover:bg-surface-variant h-8 w-8 flex items-center justify-center rounded"
+                title="Add Manual Finding"
               >
                 <span className="material-symbols-outlined">add</span>
               </button>
@@ -158,7 +166,7 @@ export default function ActionTracker({ actionItems, onUpdateActionStatus, onCre
             <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-1">
               {todoItems.map(renderCard)}
               {todoItems.length === 0 && (
-                <div className="text-center py-8 text-secondary font-label-sm uppercase text-xs">No pending items</div>
+                <div className="text-center py-8 text-secondary font-label-sm uppercase text-xs">No pending findings</div>
               )}
             </div>
           </div>

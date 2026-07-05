@@ -237,9 +237,9 @@ export const sheetsDB = {
     resolve: (id) => updateRowById(S.RED_TAGS, 'id', id, { status: 'Resolved' }),
   },
 
-  // ── Action Items ──────────────────────────────────────────────────────────
+  // ─── Action Items / Findings ──────────────────────────────────────────────
   actionItems: {
-    headers: ['id', 'title', 'severity', 'location', 'assignedTo', 'dueDate', 'status', 'photoUrl'],
+    headers: ['id', 'auditId', 'pillar', 'title', 'severity', 'location', 'assignedTo', 'dueDate', 'status', 'photoUrl'],
     getAll: () => readSheet(S.ACTION_ITEMS),
     add: (item) => appendRow(S.ACTION_ITEMS, item),
     updateStatus: (id, status) => updateRowById(S.ACTION_ITEMS, 'id', id, { status }),

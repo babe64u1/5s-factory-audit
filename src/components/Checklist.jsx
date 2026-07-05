@@ -190,20 +190,49 @@ export default function Checklist({ currentUser, onSubmitAudit, zones = [], depa
       return;
     }
 
+    let missingNotesText = '';
+    
     // Collect failed items
     const failedItems = [];
+    const newFindings = [];
+    
     questionsList.forEach((q) => {
       const status = answers[q.id];
       if (status === 'fail') {
+        const itemNote = notes[q.id] || '';
+        if (!itemNote.trim()) {
+          hasPhotoError = true; // reusing error flag to block submission
+          missingNotesText = q.text;
+        }
+
+        const itemPhotos = photos[q.id] || [];
         failedItems.push({
           qId: q.id,
           category: q.category,
           questionText: q.text,
-          notes: notes[q.id] || 'No notes provided',
-          photos: photos[q.id] || []
+          notes: itemNote || 'No notes provided',
+          photos: itemPhotos
+        });
+
+        // Generate official finding for Action Tracker
+        newFindings.push({
+          id: `FND-${Math.floor(10000 + Math.random() * 90000)}`,
+          title: `[${q.category}] ${itemNote}`,
+          severity: 'HIGH',
+          location: selectedZone || 'PLANT 04 - ZONE B',
+          assignedTo: 'PIC', // Will be managed by the PIC
+          dueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Next day
+          status: 'TO DO',
+          pillar: q.category,
+          photoUrl: itemPhotos.length > 0 ? itemPhotos[0].url : ''
         });
       }
     });
+
+    if (missingNotesText) {
+      alert(`Finding Required:\nYou must describe the issue/finding for all failed items.\n\nMissing on:\n"${missingNotesText}"`);
+      return;
+    }
 
     const auditData = {
       date: new Date().toISOString().split('T')[0],
@@ -216,7 +245,7 @@ export default function Checklist({ currentUser, onSubmitAudit, zones = [], depa
       failedItems: failedItems
     };
 
-    onSubmitAudit(auditData);
+    onSubmitAudit(auditData, newFindings);
     alert(`Audit submitted successfully! Score: ${score}%`);
 
     // Reset checklist state
