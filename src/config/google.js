@@ -13,15 +13,23 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+const sanitizeConfigValue = (val) => {
+  if (typeof val !== 'string') return '';
+  return val
+    .trim()                           // Remove leading/trailing spaces/newlines
+    .replace(/^["']|["']$/g, '')      // Remove leading/trailing single/double quotes
+    .trim();                          // Remove any extra spaces after quote removal
+};
+
 export const GOOGLE_CONFIG = {
   // ── OAuth Client ID ───────────────────────────────────────────────────────
-  CLIENT_ID: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
+  CLIENT_ID: sanitizeConfigValue(import.meta.env.VITE_GOOGLE_CLIENT_ID),
 
   // ── Google Sheets: Spreadsheet ID ─────────────────────────────────────────
-  SPREADSHEET_ID: import.meta.env.VITE_SPREADSHEET_ID || '',
+  SPREADSHEET_ID: sanitizeConfigValue(import.meta.env.VITE_SPREADSHEET_ID),
 
   // ── Google Drive: Photo Folder ID ─────────────────────────────────────────
-  DRIVE_FOLDER_ID: import.meta.env.VITE_DRIVE_FOLDER_ID || '',
+  DRIVE_FOLDER_ID: sanitizeConfigValue(import.meta.env.VITE_DRIVE_FOLDER_ID),
 
   // ── OAuth Scopes ──────────────────────────────────────────────────────────
   SCOPES: [

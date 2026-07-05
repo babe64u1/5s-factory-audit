@@ -103,9 +103,12 @@ function _setupTokenClient(resolve, reject) {
     });
 
     if (!_tokenClient || typeof _tokenClient.requestToken !== 'function') {
+      const keys = _tokenClient ? Object.keys(_tokenClient).join(', ') : 'none';
+      const type = typeof _tokenClient;
       throw new Error(
-        'initTokenClient did not return a valid token client. ' +
-        'Verify your Client ID is correct in src/config/google.js'
+        `initTokenClient did not return a valid token client. ` +
+        `Type: ${type}, Keys: [${keys}], ` +
+        `Client ID: >>>${GOOGLE_CONFIG.CLIENT_ID}<<<`
       );
     }
 
