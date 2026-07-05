@@ -102,7 +102,7 @@ function _setupTokenClient(resolve, reject) {
       },
     });
 
-    if (!_tokenClient || typeof _tokenClient.requestToken !== 'function') {
+    if (!_tokenClient || typeof _tokenClient.requestAccessToken !== 'function') {
       const keys = _tokenClient ? Object.keys(_tokenClient).join(', ') : 'none';
       const type = typeof _tokenClient;
       throw new Error(
@@ -143,7 +143,7 @@ function _handleTokenResponse(tokenResponse) {
  */
 export const signInWithGoogle = () => {
   return new Promise((resolve, reject) => {
-    if (!_tokenClient || typeof _tokenClient.requestToken !== 'function') {
+    if (!_tokenClient || typeof _tokenClient.requestAccessToken !== 'function') {
       reject(new Error('Google Auth not initialized. Call initGoogleAuth() first.'));
       return;
     }
@@ -210,7 +210,7 @@ export const signInWithGoogle = () => {
     _pendingReject = (err) => settle(reject, err);
 
     try {
-      _tokenClient.requestToken();
+      _tokenClient.requestAccessToken();
     } catch (err) {
       settle(reject, err);
     }
@@ -235,7 +235,8 @@ export const getValidToken = () => {
     const settle = (fn, val) => { if (!settled) { settled = true; fn(val); } };
     _pendingResolve = (data) => settle(resolve, data.access_token);
     _pendingReject = (err)  => settle(reject, err);
-    _tokenClient.requestToken({ prompt: '' });
+    // passing prompt: '' skips the account selector if they are already logged in
+    _tokenClient.requestAccessToken({ prompt: '' });
   });
 };
 
