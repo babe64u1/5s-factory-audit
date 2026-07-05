@@ -72,7 +72,16 @@ export async function appendRow(sheetName, rowObject) {
       body: JSON.stringify({ values: [rowValues] }),
     }
   );
-  if (!res.ok) throw new Error(`Sheets append error: ${res.statusText}`);
+  if (!res.ok) {
+    let errMsg = res.statusText;
+    try {
+      const errJson = await res.json();
+      errMsg = errJson.error?.message || res.statusText;
+    } catch (e) {
+      // ignore JSON parse error
+    }
+    throw new Error(`[${res.status}] ${errMsg}`);
+  }
   return res.json();
 }
 
