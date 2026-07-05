@@ -26,7 +26,7 @@ export async function readSheet(sheetName) {
   const headers = await authHeaders();
   const res = await fetch(
     `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}`,
-    { headers }
+    { headers, cache: 'no-store' }
   );
   if (!res.ok) throw new Error(`Sheets read error: ${res.statusText}`);
   const data = await res.json();
