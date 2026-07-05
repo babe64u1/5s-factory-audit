@@ -177,9 +177,6 @@ export default function Login({ onLogin, onGoogleSignUp, onGoogleLogin, approved
                     {errorMsg}
                   </p>
                 )}
-                <p className="text-[11px] text-[#B0B0C8] text-center mt-1">
-                  Demo — Operator: <span className="font-bold text-[#353750]">1234</span> &nbsp;·&nbsp; Manager: <span className="font-bold text-[#353750]">8888</span>
-                </p>
               </div>
             )}
 
