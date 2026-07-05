@@ -9,7 +9,7 @@ import ActionTracker from './components/ActionTracker';
 import Schedule from './components/Schedule';
 import AdminPanel from './components/AdminPanel';
 import CompanyEmailModal from './components/CompanyEmailModal';
-import { initGoogleAuth } from './services/googleAuth';
+import { initGoogleAuth, isSignedIn, signInWithGoogle } from './services/googleAuth';
 import { sheetsDB } from './services/googleSheets';
 import { isGoogleConfigured } from './config/google';
 
@@ -66,8 +66,32 @@ const MOCK_SCHEDULES = [
   { id: 'SCH-1005', zone: 'PLANT 04 - ZONE B', auditor: 'S. CHEN', date: '2026-07-01', status: 'OVERDUE' }
 ];
 
-// Pre-seeded approved users (built-in legacy PIN accounts + example approved Google user)
+// Pre-seeded approved users (built-in legacy PIN accounts + pre-approved Google manager accounts)
 const DEFAULT_APPROVED_USERS = [
+  {
+    id: 'user-google-dicky',
+    name: 'DICKY SETYAWAN',
+    email: 'dicky.setyawan@gmail.com',
+    role: 'MANAGER',
+    authType: 'GOOGLE',
+    approvedAt: '2026-01-01',
+    avatar: 'DS',
+    avatarColor: '#1a73e8',
+    companyEmail: 'dicky.setyawan@gmail.com',
+    department: 'PRODUCTION'
+  },
+  {
+    id: 'user-google-admin',
+    name: 'ADMIN FACTORY',
+    email: 'admin.factory@gmail.com',
+    role: 'MANAGER',
+    authType: 'GOOGLE',
+    approvedAt: '2026-01-01',
+    avatar: 'AF',
+    avatarColor: '#34a853',
+    companyEmail: 'admin.factory@gmail.com',
+    department: 'PRODUCTION'
+  },
   {
     id: 'user-pin-operator',
     name: 'J. MILLER',
@@ -105,17 +129,30 @@ function App() {
 
   // ─── Google Services Init ────────────────────────────────────────────────
   const [googleReady, setGoogleReady] = useState(false);
+  const [googleTokenActive, setGoogleTokenActive] = useState(false);
+
   useEffect(() => {
     if (isGoogleConfigured()) {
       initGoogleAuth()
-        .then(() => setGoogleReady(true))
+        .then(() => {
+          setGoogleReady(true);
+          // Set initial token active state if already signed in
+          setGoogleTokenActive(isSignedIn());
+        })
         .catch(err => console.warn('Google Auth init failed (configure src/config/google.js):', err));
     }
   }, []);
 
-  // Fetch all data from Google Sheets when authenticated
+  // Sync token state on login / view changes
   useEffect(() => {
-    if (googleReady && currentUser?.authType === 'GOOGLE') {
+    if (googleReady) {
+      setGoogleTokenActive(isSignedIn());
+    }
+  }, [googleReady, currentUser, currentView]);
+
+  // Fetch all data from Google Sheets when a valid Google token is active
+  useEffect(() => {
+    if (googleReady && googleTokenActive) {
       const loadSheetsDatabase = async () => {
         try {
           // 1. Initialize headers on empty tabs
@@ -174,7 +211,7 @@ function App() {
       };
       loadSheetsDatabase();
     }
-  }, [googleReady, currentUser]);
+  }, [googleReady, googleTokenActive]);
 
   // ─── Access Control State ───────────────────────────────────────────────────
   const [pendingUsers, setPendingUsers] = useState(() =>
@@ -654,6 +691,19 @@ function App() {
 
   const handleHeatmapNewAudit = () => { setCurrentView('CHECKLIST'); };
 
+  const handleConnectGoogle = async () => {
+    try {
+      await signInWithGoogle();
+      setGoogleTokenActive(true);
+      alert('Google Sheets database synced successfully!');
+    } catch (err) {
+      console.error('Google Sheets sync connection failed:', err);
+      if (err?.message !== 'popup_closed') {
+        alert('Failed to connect: ' + err.message);
+      }
+    }
+  };
+
   /** Resolve a red tag — updates local state + Google Sheets if configured */
   const handleResolveRedTag = async (tagId) => {
     setRedTags(prev =>
@@ -678,6 +728,9 @@ function App() {
       currentUser={currentUser}
       onLogout={handleLogout}
       pendingCount={activePendingCount}
+      isGoogleSynced={googleReady && googleTokenActive}
+      isGoogleConfigured={isGoogleConfigured()}
+      onConnectGoogle={handleConnectGoogle}
     >
       {currentView === 'LOGIN' && (
         <Login

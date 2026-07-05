@@ -42,7 +42,17 @@ function SidebarWaves() {
   );
 }
 
-export default function Layout({ children, currentView, setCurrentView, currentUser, onLogout, pendingCount = 0 }) {
+export default function Layout({ 
+  children, 
+  currentView, 
+  setCurrentView, 
+  currentUser, 
+  onLogout, 
+  pendingCount = 0,
+  isGoogleSynced = false,
+  isGoogleConfigured = false,
+  onConnectGoogle
+}) {
   if (currentView === 'LOGIN') {
     return <>{children}</>;
   }
@@ -77,6 +87,24 @@ export default function Layout({ children, currentView, setCurrentView, currentU
           </h1>
         </div>
         <div className="flex items-center gap-3">
+          {/* Google Sheets Sync status */}
+          {isGoogleConfigured && (
+            <button
+              onClick={onConnectGoogle}
+              className={`flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1.5 rounded-full uppercase border transition-all ${
+                isGoogleSynced
+                  ? 'bg-[#E8F5E9] text-[#2E7D32] border-[#2E7D32]/20 hover:bg-[#E8F5E9]/80'
+                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 animate-pulse'
+              }`}
+              title={isGoogleSynced ? "Sheets Database Connected" : "Click to connect Google Sheets"}
+            >
+              <span className="material-symbols-outlined text-xs" style={{ fontSize: 13 }}>
+                {isGoogleSynced ? 'cloud_done' : 'cloud_off'}
+              </span>
+              <span>{isGoogleSynced ? 'Sheets Sync On' : 'Sync Sheets'}</span>
+            </button>
+          )}
+
           {/* User chip */}
           <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-[#F4F4F6] rounded-full border border-[#E0E0EC]">
             <div
