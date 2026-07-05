@@ -78,13 +78,23 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
     data.forEach(row => {
       if (row[dateHeader]) {
         try {
-          // Parse date string (assumes standard formats or ISO)
-          const d = new Date(row[dateHeader]);
+          const dateStr = String(row[dateHeader]).trim();
+          let d = new Date(dateStr);
+          
+          // Check for DD/MM/YYYY HH:mm:ss format
+          const parts = dateStr.split(' ')[0].split('/');
+          if (parts.length === 3 && parts[2].length === 4) {
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const year = parseInt(parts[2], 10);
+            d = new Date(year, month, day);
+          }
+
           if (!isNaN(d.getTime())) {
             const monthStr = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
             months.add(monthStr);
-            // Attach parsed month back to the row for easy filtering later
             row._parsedMonth = monthStr;
+            row._parsedDateObj = d;
           }
         } catch (e) {
           // ignore parsing errors
@@ -94,6 +104,18 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
 
     return Array.from(months).sort((a, b) => new Date(b) - new Date(a));
   }, [data, headers]);
+
+  // Extract latest 3 findings for Communication Card
+  const latestFindings = useMemo(() => {
+    if (title !== 'Communication Card' || !data.length) return [];
+    
+    // Sort by the parsed date object
+    const sortedData = [...data]
+      .filter(row => row._parsedDateObj)
+      .sort((a, b) => b._parsedDateObj - a._parsedDateObj);
+
+    return sortedData.slice(0, 3);
+  }, [data, title]);
 
   // Apply filter
   const filteredData = useMemo(() => {
@@ -192,6 +214,62 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
           </div>
         )}
       </div>
+
+      {/* Latest 3 Findings (Only for Communication Card) */}
+      {title === 'Communication Card' && latestFindings.length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-[#353750] font-bold text-sm uppercase tracking-wider mb-4 flex items-center gap-2">
+            <span className="material-symbols-outlined text-secondary text-sm">notifications_active</span>
+            Latest Submissions
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {latestFindings.map((finding, idx) => {
+              // Try to intelligently find the requested columns based on typical indonesian headers
+              const timestampHeader = headers.find(h => h.toLowerCase().includes('timestamp') || h.toLowerCase().includes('waktu') || h.toLowerCase().includes('tanggal'));
+              const nameHeader = headers.find(h => h.toLowerCase().includes('nama'));
+              const locationHeader = headers.find(h => h.toLowerCase().includes('lokasi'));
+              const descHeader = headers.find(h => h.toLowerCase().includes('penjelasan') || h.toLowerCase().includes('temuan') || h.toLowerCase().includes('deskripsi'));
+
+              const dateStr = finding[timestampHeader] || 'Unknown Date';
+              const parts = dateStr.split(' ');
+              const datePart = parts[0] || '';
+              const timePart = parts[1] || '';
+
+              return (
+                <div key={idx} className="bg-[#FFF4E5] border border-[#FFE0B2] p-4 rounded-xl shadow-sm flex flex-col gap-2 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 bg-[#FF9800] text-white text-[8px] font-bold px-2 py-1 rounded-bl-lg">NEW</div>
+                  <div className="flex justify-between items-center text-[#E65100]">
+                    <div className="flex items-center gap-1 text-xs font-bold">
+                      <span className="material-symbols-outlined text-[14px]">calendar_today</span>
+                      {datePart}
+                    </div>
+                    <div className="flex items-center gap-1 text-xs font-bold">
+                      <span className="material-symbols-outlined text-[14px]">schedule</span>
+                      {timePart}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 text-sm font-bold text-[#353750] mt-1 border-b border-[#FFE0B2] pb-2">
+                    <div className="w-6 h-6 bg-[#E65100] text-white rounded-full flex items-center justify-center text-[10px]">
+                      {(finding[nameHeader] || 'U').slice(0, 2).toUpperCase()}
+                    </div>
+                    {finding[nameHeader] || 'Unknown User'}
+                  </div>
+
+                  <div className="text-xs font-bold text-[#6B6E8A] mt-1 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[14px]">location_on</span>
+                    {finding[locationHeader] || 'Unknown Location'}
+                  </div>
+
+                  <div className="text-sm text-[#353750] mt-1 line-clamp-3 italic">
+                    "{finding[descHeader] || 'No description provided.'}"
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Auto-Generated Charts */}
       {chartsData.length > 0 && (
