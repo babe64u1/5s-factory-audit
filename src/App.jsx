@@ -127,9 +127,21 @@ function App() {
   const [zones, setZones] = useState(() => getInitialState('5s_zones', DEFAULT_ZONES));
   const [departments, setDepartments] = useState(() => getInitialState('5s_departments', DEFAULT_DEPARTMENTS));
 
+
   // ─── Google Services Init ────────────────────────────────────────────────
   const [googleReady, setGoogleReady] = useState(false);
   const [googleTokenActive, setGoogleTokenActive] = useState(false);
+
+  // Auto-update default PINs in case user has old ones cached in localStorage
+  useEffect(() => {
+    setApprovedUsers(prev => prev.map(user => {
+      const defaultMatch = DEFAULT_APPROVED_USERS.find(d => d.id === user.id);
+      if (defaultMatch && user.pin !== defaultMatch.pin) {
+        return { ...user, pin: defaultMatch.pin };
+      }
+      return user;
+    }));
+  }, []);
 
   useEffect(() => {
     if (isGoogleConfigured()) {
