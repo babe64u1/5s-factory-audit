@@ -532,10 +532,20 @@ function App() {
   /** Save company email and department to approvedUsers record, then enter the app. */
   const handleCompanyEmailSubmit = async (companyEmail, department) => {
     const updatedUser = { ...pendingLoginUser, companyEmail, department };
-    // Persist to approvedUsers so future logins remember it
+    // Persist to approvedUsers so future logins remember it locally
     setApprovedUsers((prev) =>
       prev.map((u) => (u.id === pendingLoginUser.id ? updatedUser : u))
     );
+
+    // Persist to Google Sheets so the database remembers it across sessions
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.usersApproved.update(pendingLoginUser.id, { companyEmail, department });
+      } catch (err) {
+        console.error('Failed to save company profile to Sheets:', err);
+      }
+    }
+
     setShowCompanyEmailModal(false);
     setPendingLoginUser(null);
     _enterApp(updatedUser);
