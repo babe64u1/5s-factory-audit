@@ -44,10 +44,21 @@ export async function readSheet(sheetName) {
 export async function appendRow(sheetName, rowObject) {
   const headers = await authHeaders();
   // Get header row first to ensure correct column order
-  const headerRes = await fetch(
+  let headerRes = await fetch(
     `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}!1:1`,
     { headers }
   );
+  
+  if (headerRes.status === 400) {
+    // Sheet probably doesn't exist. Let ensureHeaders handle creation.
+    await ensureHeaders(sheetName, Object.keys(rowObject));
+    // Retry fetching headers
+    headerRes = await fetch(
+      `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}!1:1`,
+      { headers }
+    );
+  }
+
   const headerData = await headerRes.json();
   const headerRow = (headerData.values?.[0]) || Object.keys(rowObject);
 
@@ -158,10 +169,28 @@ export async function ensureHeaders(sheetName, headers) {
   const token = await getValidToken();
   const authHead = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  const res = await fetch(
+  let res = await fetch(
     `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}!1:1`,
     { headers: authHead }
   );
+
+  // If 400 Bad Request, the sheet probably doesn't exist. Create it!
+  if (res.status === 400) {
+    console.log(`Sheet "${sheetName}" not found. Creating it...`);
+    await fetch(`${SHEETS_BASE}/${SID()}:batchUpdate`, {
+      method: 'POST',
+      headers: authHead,
+      body: JSON.stringify({
+        requests: [{ addSheet: { properties: { title: sheetName } } }]
+      })
+    });
+    // Retry fetching the newly created sheet
+    res = await fetch(
+      `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}!1:1`,
+      { headers: authHead }
+    );
+  }
+
   const data = await res.json();
   if (data.values?.[0]?.length > 0) return; // Already has headers
 
