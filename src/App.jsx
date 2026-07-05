@@ -225,11 +225,49 @@ function App() {
     }
   }, [zones]);
 
-  const handleCreateZone = (newZone) => { setZones(prev => [...prev, newZone]); };
-  const handleDeleteZone = (zoneId) => { setZones(prev => prev.filter(z => z.id !== zoneId)); };
+  const handleCreateZone = async (newZone) => {
+    setZones(prev => [...prev, newZone]);
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.zones.add(newZone);
+      } catch (err) {
+        console.error('Failed to create zone in Sheets:', err);
+      }
+    }
+  };
 
-  const handleCreateDepartment = (newDept) => { setDepartments(prev => [...prev, newDept]); };
-  const handleDeleteDepartment = (deptId) => { setDepartments(prev => prev.filter(d => d.id !== deptId)); };
+  const handleDeleteZone = async (zoneId) => {
+    setZones(prev => prev.filter(z => z.id !== zoneId));
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.zones.delete(zoneId);
+      } catch (err) {
+        console.error('Failed to delete zone from Sheets:', err);
+      }
+    }
+  };
+
+  const handleCreateDepartment = async (newDept) => {
+    setDepartments(prev => [...prev, newDept]);
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.departments.add(newDept);
+      } catch (err) {
+        console.error('Failed to create department in Sheets:', err);
+      }
+    }
+  };
+
+  const handleDeleteDepartment = async (deptId) => {
+    setDepartments(prev => prev.filter(d => d.id !== deptId));
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.departments.delete(deptId);
+      } catch (err) {
+        console.error('Failed to delete department from Sheets:', err);
+      }
+    }
+  };
 
   // ─── Access Control Handlers ────────────────────────────────────────────────
 
@@ -270,12 +308,21 @@ function App() {
       requestedAt: new Date().toISOString(),
       status: 'PENDING',
     };
+    
     setPendingUsers((prev) => [newPending, ...prev]);
+
+    // Save to Google Sheets in background if configured
+    if (isGoogleConfigured()) {
+      sheetsDB.usersPending.add(newPending).catch(err =>
+        console.error('Failed to save pending user to Sheets:', err)
+      );
+    }
+
     return { status: 'registered', user: newPending };
   };
 
   /** Approve a pending user. Assigns role chosen by admin/manager. */
-  const handleApproveUser = (pendingId, role) => {
+  const handleApproveUser = async (pendingId, role) => {
     const pendingUser = pendingUsers.find((u) => u.id === pendingId);
     if (!pendingUser) return;
 
@@ -289,26 +336,64 @@ function App() {
       avatar: pendingUser.avatar,
       avatarColor: pendingUser.avatarColor,
       approvedAt: new Date().toISOString(),
+      companyEmail: '',
+      department: ''
     };
+    
     setApprovedUsers((prev) => [approvedUser, ...prev]);
     setPendingUsers((prev) => prev.filter((u) => u.id !== pendingId));
+
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await Promise.all([
+          sheetsDB.usersApproved.add(approvedUser),
+          sheetsDB.usersPending.delete(pendingId)
+        ]);
+      } catch (err) {
+        console.error('Failed to update user approval in Sheets:', err);
+      }
+    }
   };
 
   /** Reject a pending user (keeps them in the list as REJECTED). */
-  const handleRejectUser = (pendingId) => {
+  const handleRejectUser = async (pendingId) => {
     setPendingUsers((prev) =>
       prev.map((u) => (u.id === pendingId ? { ...u, status: 'REJECTED' } : u))
     );
+
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.usersPending.updateStatus(pendingId, 'REJECTED');
+      } catch (err) {
+        console.error('Failed to reject user in Sheets:', err);
+      }
+    }
   };
 
   /** Remove a rejected/pending user entirely from the list. */
-  const handleRemovePendingUser = (pendingId) => {
+  const handleRemovePendingUser = async (pendingId) => {
     setPendingUsers((prev) => prev.filter((u) => u.id !== pendingId));
+
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.usersPending.delete(pendingId);
+      } catch (err) {
+        console.error('Failed to remove pending user from Sheets:', err);
+      }
+    }
   };
 
   /** Revoke an approved Google user. */
-  const handleRevokeUser = (userId) => {
+  const handleRevokeUser = async (userId) => {
     setApprovedUsers((prev) => prev.filter((u) => u.id !== userId));
+
+    if (googleReady && isGoogleConfigured()) {
+      try {
+        await sheetsDB.usersApproved.delete(userId);
+      } catch (err) {
+        console.error('Failed to revoke approved user from Sheets:', err);
+      }
+    }
   };
 
   // ─── View Routing ────────────────────────────────────────────────────────────
@@ -334,7 +419,7 @@ function App() {
   };
 
   /** Save company email and department to approvedUsers record, then enter the app. */
-  const handleCompanyEmailSubmit = (companyEmail, department) => {
+  const handleCompanyEmailSubmit = async (companyEmail, department) => {
     const updatedUser = { ...pendingLoginUser, companyEmail, department };
     // Persist to approvedUsers so future logins remember it
     setApprovedUsers((prev) =>
