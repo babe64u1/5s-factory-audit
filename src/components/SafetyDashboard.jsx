@@ -228,7 +228,7 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
               const timestampHeader = headers.find(h => h.toLowerCase().includes('timestamp') || h.toLowerCase().includes('waktu') || h.toLowerCase().includes('tanggal'));
               const nameHeader = headers.find(h => h.toLowerCase().includes('nama'));
               const locationHeader = headers.find(h => h.toLowerCase().includes('lokasi'));
-              const descHeader = headers.find(h => h.toLowerCase().includes('penjelasan') || h.toLowerCase().includes('temuan') || h.toLowerCase().includes('deskripsi'));
+              const descHeader = headers.find(h => h.toLowerCase().includes('jelaskan') || h.toLowerCase().includes('penjelasan') || h.toLowerCase().includes('deskripsi'));
 
               const dateStr = finding[timestampHeader] || 'Unknown Date';
               const parts = dateStr.split(' ');
