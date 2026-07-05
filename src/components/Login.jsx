@@ -72,9 +72,9 @@ export default function Login({ onLogin, onGoogleSignUp, onGoogleLogin, approved
     }
   };
 
-  const handleGoogleAccountSelected = (googleUserData) => {
+  const handleGoogleAccountSelected = async (googleUserData) => {
     setShowGoogleModal(false);
-    const result = onGoogleSignUp(googleUserData);
+    const result = await onGoogleSignUp(googleUserData);
     if (result.status === 'approved') {
       onGoogleLogin(result.user);
     } else {

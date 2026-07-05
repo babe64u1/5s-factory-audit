@@ -15,6 +15,8 @@ export default function AdminPanel({
   onRejectUser,
   onRemovePendingUser,
   onRevokeUser,
+  onRefreshPendingUsers,
+  isGoogleConfigured = false,
   currentUser,
 }) {
   const [zoneName, setZoneName] = useState('');
@@ -23,7 +25,8 @@ export default function AdminPanel({
   const [deptName, setDeptName] = useState('');
   const [approvalRoles, setApprovalRoles] = useState({});
   const [activeTab, setActiveTab] = useState('requests');
-  const [confirmModal, setConfirmModal] = useState(null); // { type: 'revoke' | 'deleteZone' | 'deleteDept', target }
+  const [confirmModal, setConfirmModal] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const activePending = pendingUsers.filter((u) => u.status === 'PENDING');
   const rejectedPending = pendingUsers.filter((u) => u.status === 'REJECTED');
@@ -71,6 +74,13 @@ export default function AdminPanel({
   const handleApprove = (pendingId) => {
     const role = approvalRoles[pendingId] || 'OPERATOR';
     onApproveUser(pendingId, role);
+  };
+
+  const handleRefresh = async () => {
+    if (!onRefreshPendingUsers || isRefreshing) return;
+    setIsRefreshing(true);
+    await onRefreshPendingUsers();
+    setIsRefreshing(false);
   };
 
   const formatDate = (iso) => {
@@ -147,10 +157,34 @@ export default function AdminPanel({
                 <span className="material-symbols-outlined text-[#F05731] text-xl">hourglass_top</span>
                 <h2 className="font-bold text-[#353750] uppercase text-sm tracking-wide">Pending Requests</h2>
               </div>
-              <span className="text-xs font-bold bg-[#FFF3E0] text-[#F05731] px-3 py-1 rounded-full border border-[#F05731]/20">
-                {activePending.length} Awaiting
-              </span>
+              <div className="flex items-center gap-2">
+                {isGoogleConfigured && (
+                  <button
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E0E0EC] text-xs font-bold uppercase text-[#353750] hover:bg-[#F4F4F6] transition-all disabled:opacity-50"
+                    title="Refresh from Google Sheets (pulls registrations from all devices)"
+                  >
+                    <span className={`material-symbols-outlined text-sm ${isRefreshing ? 'animate-spin' : ''}`}>
+                      {isRefreshing ? 'autorenew' : 'sync'}
+                    </span>
+                    {isRefreshing ? 'Syncing...' : 'Refresh'}
+                  </button>
+                )}
+                <span className="text-xs font-bold bg-[#FFF3E0] text-[#F05731] px-3 py-1 rounded-full border border-[#F05731]/20">
+                  {activePending.length} Awaiting
+                </span>
+              </div>
             </div>
+
+            {!isGoogleConfigured && (
+              <div className="mx-4 mt-3 mb-0 px-3 py-2.5 bg-[#FFF9E6] border border-[#F5C518]/40 rounded-lg flex items-start gap-2">
+                <span className="material-symbols-outlined text-[#E8920A] text-sm mt-0.5 shrink-0">info</span>
+                <p className="text-[10px] text-[#8A6000] leading-relaxed">
+                  <strong>Cross-device sync not active.</strong> Connect Google Sheets (Sync button in header) to see registration requests from other devices.
+                </p>
+              </div>
+            )}
 
             {activePending.length === 0 ? (
               <div className="p-12 text-center text-[#6B6E8A] text-xs uppercase font-bold">

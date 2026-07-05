@@ -9,9 +9,9 @@ import ActionTracker from './components/ActionTracker';
 import Schedule from './components/Schedule';
 import AdminPanel from './components/AdminPanel';
 import CompanyEmailModal from './components/CompanyEmailModal';
-import { initGoogleAuth, isSignedIn, signInWithGoogle } from './services/googleAuth';
-import { sheetsDB } from './services/googleSheets';
-import { isGoogleConfigured } from './config/google';
+import { initGoogleAuth, isSignedIn, signInWithGoogle, getValidToken } from './services/googleAuth';
+import { sheetsDB, readSheet } from './services/googleSheets';
+import { isGoogleConfigured, GOOGLE_CONFIG } from './config/google';
 
 const DEFAULT_ZONES = [
   { id: 'zone-1', name: 'PLANT 04 - ZONE B', description: 'CNC Workshop Section B', score: 92, department: 'PRODUCTION' },
@@ -312,10 +312,46 @@ function App() {
    * Called when user clicks "Sign in with Google" and picks an account.
    * Returns status: 'approved' | 'pending' | 'rejected' | 'registered'
    */
-  const handleGoogleSignUp = (googleUserData) => {
+  const handleGoogleSignUp = async (googleUserData) => {
     const email = googleUserData.email.toLowerCase();
 
-    // Check if already approved
+    // ── First, try to refresh from Sheets so we have the latest state ──────
+    // (At this point the operator just completed Google OAuth so a token is active)
+    if (isGoogleConfigured()) {
+      try {
+        const [sheetApproved, sheetPending] = await Promise.all([
+          sheetsDB.usersApproved.getAll(),
+          sheetsDB.usersPending.getAll()
+        ]);
+        if (sheetApproved.length > 0) setApprovedUsers(sheetApproved);
+        if (sheetPending.length > 0) setPendingUsers(sheetPending);
+
+        // Re-check against freshly-fetched data
+        const freshApproved = sheetApproved.length > 0 ? sheetApproved : approvedUsers;
+        const freshPending  = sheetPending.length  > 0 ? sheetPending  : pendingUsers;
+
+        const existingApprovedFresh = freshApproved.find(
+          (u) => u.email && u.email.toLowerCase() === email
+        );
+        if (existingApprovedFresh) {
+          return { status: 'approved', user: existingApprovedFresh };
+        }
+
+        const existingPendingFresh = freshPending.find(
+          (u) => u.email && u.email.toLowerCase() === email
+        );
+        if (existingPendingFresh) {
+          if (existingPendingFresh.status === 'REJECTED') {
+            return { status: 'rejected', user: existingPendingFresh };
+          }
+          return { status: 'pending', user: existingPendingFresh };
+        }
+      } catch (err) {
+        console.warn('Could not refresh from Sheets during sign-up, using local state:', err);
+      }
+    }
+
+    // Check if already approved (local fallback)
     const existingApproved = approvedUsers.find(
       (u) => u.email && u.email.toLowerCase() === email
     );
@@ -323,7 +359,7 @@ function App() {
       return { status: 'approved', user: existingApproved };
     }
 
-    // Check if already pending
+    // Check if already pending (local fallback)
     const existingPending = pendingUsers.find(
       (u) => u.email && u.email.toLowerCase() === email
     );
@@ -348,7 +384,7 @@ function App() {
     
     setPendingUsers((prev) => [newPending, ...prev]);
 
-    // Save to Google Sheets in background if configured
+    // Save to Google Sheets — token is active right now (operator just signed in with Google)
     if (isGoogleConfigured()) {
       sheetsDB.usersPending.add(newPending).catch(err =>
         console.error('Failed to save pending user to Sheets:', err)
@@ -417,6 +453,28 @@ function App() {
       } catch (err) {
         console.error('Failed to remove pending user from Sheets:', err);
       }
+    }
+  };
+
+  /**
+   * Refresh pending users from Google Sheets (cross-device sync).
+   * Called manually by the manager via the "Refresh" button in AdminPanel,
+   * and automatically when the ADMIN view is opened.
+   */
+  const handleRefreshPendingUsers = async () => {
+    if (!isGoogleConfigured()) return;
+    try {
+      const [sheetApproved, sheetPending] = await Promise.all([
+        sheetsDB.usersApproved.getAll(),
+        sheetsDB.usersPending.getAll()
+      ]);
+      if (sheetApproved.length > 0) setApprovedUsers(sheetApproved);
+      // Always update pending (even empty means all were processed)
+      setPendingUsers(sheetPending);
+      return true;
+    } catch (err) {
+      console.error('Failed to refresh pending users from Sheets:', err);
+      return false;
     }
   };
 
@@ -729,6 +787,13 @@ function App() {
 
   const activePendingCount = pendingUsers.filter((u) => u.status === 'PENDING').length;
 
+  // Auto-refresh pending users from Sheets whenever ADMIN view is opened and Google is configured
+  useEffect(() => {
+    if (currentView === 'ADMIN' && isGoogleConfigured()) {
+      handleRefreshPendingUsers();
+    }
+  }, [currentView]);
+
   return (
     <>
     <Layout
@@ -809,6 +874,8 @@ function App() {
           onRejectUser={handleRejectUser}
           onRemovePendingUser={handleRemovePendingUser}
           onRevokeUser={handleRevokeUser}
+          onRefreshPendingUsers={handleRefreshPendingUsers}
+          isGoogleConfigured={isGoogleConfigured()}
           currentUser={currentUser}
         />
       )}
