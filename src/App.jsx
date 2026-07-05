@@ -699,9 +699,17 @@ function App() {
       alert('Google Sheets database synced successfully!');
     } catch (err) {
       console.error('Google Sheets sync connection failed:', err);
-      if (err?.message !== 'popup_closed') {
-        alert('Failed to connect: ' + err.message);
-      }
+      const clientConfigured = isGoogleConfigured();
+      const hasTokenClient = typeof window !== 'undefined' && !!window.google?.accounts?.oauth2?.initTokenClient;
+      alert(
+        `Failed to connect: ${err.message}\n\n` +
+        `Diagnostics:\n` +
+        `- googleReady: ${googleReady}\n` +
+        `- googleTokenActive: ${googleTokenActive}\n` +
+        `- isGoogleConfigured(): ${clientConfigured}\n` +
+        `- GIS library loaded: ${hasTokenClient}\n` +
+        `- CLIENT_ID length: ${GOOGLE_CONFIG.CLIENT_ID?.length || 0}`
+      );
     }
   };
 
