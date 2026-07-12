@@ -8,209 +8,50 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 import { GOOGLE_CONFIG } from '../config/google';
-import { getValidToken } from './googleAuth';
+const URL = () => GOOGLE_CONFIG.APPS_SCRIPT_URL;
 
-const SHEETS_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
-const SID = () => GOOGLE_CONFIG.SPREADSHEET_ID;
-
-/** Build auth headers with current valid token */
-async function authHeaders() {
-  const token = await getValidToken();
-  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+/** ── Helper: Send POST request to GAS Backend ───────────────────────────── */
+async function fetchGAS(payload) {
+  if (!URL()) throw new Error('APPS_SCRIPT_URL is not configured.');
+  
+  const res = await fetch(URL(), {
+    method: 'POST',
+    // Do NOT set Content-Type to application/json for GAS web apps to avoid preflight issues 
+    // when simple requests are preferred, though our GAS handles OPTIONS anyway.
+    body: JSON.stringify(payload),
+  });
+  
+  if (!res.ok) throw new Error(`Backend error: ${res.statusText}`);
+  const data = await res.json();
+  if (!data.success) throw new Error(`GAS Error: ${data.error}`);
+  return data.data;
 }
 
 /** ── Generic: Read all rows from a sheet tab ──────────────────────────────
  * Returns array of objects using header row as keys.
  */
 export async function readSheet(sheetName) {
-  const headers = await authHeaders();
-  const res = await fetch(
-    `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}`,
-    { headers, cache: 'no-store' }
-  );
-  if (!res.ok) throw new Error(`Sheets read error: ${res.statusText}`);
-  const data = await res.json();
-  const rows = data.values || [];
-  if (rows.length < 2) return []; // No data rows
-  const [headerRow, ...dataRows] = rows;
-  return dataRows.map(row => {
-    const obj = {};
-    headerRow.forEach((key, i) => { obj[key] = row[i] ?? ''; });
-    return obj;
-  });
+  return await fetchGAS({ action: 'read', sheetName });
 }
 
 /** ── Generic: Append one row to a sheet tab ─────────────────────────────── */
 export async function appendRow(sheetName, rowObject) {
-  const headers = await authHeaders();
-  // Get header row first to ensure correct column order
-  let headerRes = await fetch(
-    `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}!1:1`,
-    { headers }
-  );
-  
-  if (headerRes.status === 400) {
-    // Sheet probably doesn't exist. Let ensureHeaders handle creation.
-    await ensureHeaders(sheetName, Object.keys(rowObject));
-    // Retry fetching headers
-    headerRes = await fetch(
-      `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}!1:1`,
-      { headers }
-    );
-  }
-
-  const headerData = await headerRes.json();
-  const headerRow = (headerData.values?.[0]) || Object.keys(rowObject);
-
-  const rowValues = headerRow.map(key => rowObject[key] ?? '');
-
-  const res = await fetch(
-    `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}!A:A:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ values: [rowValues] }),
-    }
-  );
-  if (!res.ok) {
-    let errMsg = res.statusText;
-    try {
-      const errJson = await res.json();
-      errMsg = errJson.error?.message || res.statusText;
-    } catch (e) {
-      // ignore JSON parse error
-    }
-    throw new Error(`[${res.status}] ${errMsg}`);
-  }
-  return res.json();
+  return await fetchGAS({ action: 'append', sheetName, data: rowObject });
 }
 
 /** ── Generic: Update a single row by finding a matching ID column ────────── */
 export async function updateRowById(sheetName, idColumnName, id, updatedFields) {
-  const headers = await authHeaders();
-
-  // Read all data to find the row index
-  const readRes = await fetch(
-    `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}`,
-    { headers }
-  );
-  const data = await readRes.json();
-  const rows = data.values || [];
-  if (rows.length < 1) throw new Error('Sheet is empty');
-
-  const [headerRow, ...dataRows] = rows;
-  const idColIndex = headerRow.indexOf(idColumnName);
-  if (idColIndex === -1) throw new Error(`Column "${idColumnName}" not found in ${sheetName}`);
-
-  const rowIndex = dataRows.findIndex(row => row[idColIndex] === id);
-  if (rowIndex === -1) throw new Error(`Row with ${idColumnName}="${id}" not found`);
-
-  const sheetRowIndex = rowIndex + 2; // +1 for header, +1 for 1-indexed
-
-  // Build updated row
-  const existingRow = {};
-  headerRow.forEach((key, i) => { existingRow[key] = dataRows[rowIndex][i] ?? ''; });
-  const mergedRow = { ...existingRow, ...updatedFields };
-  const rowValues = headerRow.map(key => mergedRow[key] ?? '');
-
-  const range = `${sheetName}!A${sheetRowIndex}`;
-  const updateRes = await fetch(
-    `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
-    {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify({ values: [rowValues] }),
-    }
-  );
-  if (!updateRes.ok) throw new Error(`Sheets update error: ${updateRes.statusText}`);
-  return updateRes.json();
+  return await fetchGAS({ action: 'update', sheetName, idColumnName, id, updatedFields });
 }
 
 /** ── Generic: Delete a row by ID ───────────────────────────────────────── */
 export async function deleteRowById(sheetName, idColumnName, id) {
-  const headers = await authHeaders();
-
-  // First get the sheet's internal sheetId (gid)
-  const metaRes = await fetch(`${SHEETS_BASE}/${SID()}`, { headers });
-  const meta = await metaRes.json();
-  const sheet = meta.sheets?.find(s => s.properties.title === sheetName);
-  if (!sheet) throw new Error(`Sheet tab "${sheetName}" not found`);
-  const sheetId = sheet.properties.sheetId;
-
-  // Find the row index
-  const readRes = await fetch(
-    `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}`,
-    { headers }
-  );
-  const data = await readRes.json();
-  const rows = data.values || [];
-  const [headerRow, ...dataRows] = rows;
-  const idColIndex = headerRow.indexOf(idColumnName);
-  const rowIndex = dataRows.findIndex(row => row[idColIndex] === id);
-  if (rowIndex === -1) return; // Already deleted
-
-  const sheetRowIndex = rowIndex + 1; // 0-indexed for batchUpdate, +1 for header
-
-  const deleteRes = await fetch(
-    `${SHEETS_BASE}/${SID()}:batchUpdate`,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        requests: [{
-          deleteDimension: {
-            range: {
-              sheetId,
-              dimension: 'ROWS',
-              startIndex: sheetRowIndex,
-              endIndex: sheetRowIndex + 1,
-            }
-          }
-        }]
-      })
-    }
-  );
-  if (!deleteRes.ok) throw new Error(`Sheets delete error: ${deleteRes.statusText}`);
+  return await fetchGAS({ action: 'delete', sheetName, idColumnName, id });
 }
 
 /** ── Initialize sheet with header row if it's empty ──────────────────────── */
 export async function ensureHeaders(sheetName, headers) {
-  const token = await getValidToken();
-  const authHead = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-
-  let res = await fetch(
-    `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}!1:1`,
-    { headers: authHead }
-  );
-
-  // If 400 Bad Request, the sheet probably doesn't exist. Create it!
-  if (res.status === 400) {
-    console.log(`Sheet "${sheetName}" not found. Creating it...`);
-    await fetch(`${SHEETS_BASE}/${SID()}:batchUpdate`, {
-      method: 'POST',
-      headers: authHead,
-      body: JSON.stringify({
-        requests: [{ addSheet: { properties: { title: sheetName } } }]
-      })
-    });
-    // Retry fetching the newly created sheet
-    res = await fetch(
-      `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}!1:1`,
-      { headers: authHead }
-    );
-  }
-
-  const data = await res.json();
-  if (data.values?.[0]?.length > 0) return; // Already has headers
-
-  await fetch(
-    `${SHEETS_BASE}/${SID()}/values/${encodeURIComponent(sheetName)}!A1?valueInputOption=RAW`,
-    {
-      method: 'PUT',
-      headers: authHead,
-      body: JSON.stringify({ values: [headers] }),
-    }
-  );
+  return await fetchGAS({ action: 'ensureHeaders', sheetName, headers });
 }
 
 // ─── Domain-specific helpers ─────────────────────────────────────────────────

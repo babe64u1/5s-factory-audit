@@ -28,6 +28,9 @@ export const GOOGLE_CONFIG = {
   // ── Google Sheets: Spreadsheet ID ─────────────────────────────────────────
   SPREADSHEET_ID: sanitizeConfigValue(import.meta.env.VITE_SPREADSHEET_ID),
 
+  // ── Google Apps Script (Backend) URL ──────────────────────────────────────
+  APPS_SCRIPT_URL: sanitizeConfigValue(import.meta.env.VITE_APPS_SCRIPT_URL),
+
   // ── Google Drive: Photo Folder ID ─────────────────────────────────────────
   DRIVE_FOLDER_ID: sanitizeConfigValue(import.meta.env.VITE_DRIVE_FOLDER_ID),
 
@@ -35,9 +38,7 @@ export const GOOGLE_CONFIG = {
   SCOPES: [
     'openid',
     'email',
-    'profile',
-    'https://www.googleapis.com/auth/drive.file',       // Upload files to Drive
-    'https://www.googleapis.com/auth/spreadsheets',     // Read/write Sheets
+    'profile'
   ].join(' '),
 
   // ── Sheet tab names (must match your Google Spreadsheet tab names) ────────
@@ -57,5 +58,5 @@ export const GOOGLE_CONFIG = {
 export const isGoogleConfigured = () =>
   !!GOOGLE_CONFIG.CLIENT_ID &&
   !!GOOGLE_CONFIG.SPREADSHEET_ID &&
-  !!GOOGLE_CONFIG.DRIVE_FOLDER_ID;
+  !!GOOGLE_CONFIG.APPS_SCRIPT_URL;
 

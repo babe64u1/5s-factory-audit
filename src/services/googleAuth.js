@@ -79,11 +79,9 @@ function _setupTokenClient(resolve, reject) {
   try {
     _tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_CONFIG.CLIENT_ID,
-      // Note: openid/email/profile are identity scopes — drive.file and
-      // spreadsheets are resource scopes. We request them together.
+      // Note: We only request identity scopes now. The Apps Script backend
+      // handles the spreadsheet authorization as the admin.
       scope: [
-        'https://www.googleapis.com/auth/drive.file',
-        'https://www.googleapis.com/auth/spreadsheets',
         'openid',
         'email',
         'profile',
