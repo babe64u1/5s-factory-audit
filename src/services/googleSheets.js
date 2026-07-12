@@ -99,6 +99,7 @@ export const sheetsDB = {
     headers: ['id', 'name', 'email', 'role', 'authType', 'pin', 'googleId', 'avatar', 'avatarColor', 'companyEmail', 'department', 'approvedAt'],
     getAll: () => readSheet(S.USERS_APPROVED),
     add: (user) => appendRow(S.USERS_APPROVED, user),
+    update: (id, fields) => updateRowById(S.USERS_APPROVED, 'id', id, fields),
     delete: (id) => deleteRowById(S.USERS_APPROVED, 'id', id),
   },
 
