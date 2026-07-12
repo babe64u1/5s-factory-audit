@@ -17,39 +17,32 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
       try {
         setLoading(true);
         setError(null);
-        const token = await getValidToken();
-        const authHead = { Authorization: `Bearer ${token}` };
-
-        // 1. Get Spreadsheet Metadata to find the first sheet name
-        const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`, { headers: authHead });
-        if (!metaRes.ok) throw new Error('Failed to access the spreadsheet. Please ensure your Google account has View access to it.');
-        const metaData = await metaRes.json();
         
-        const firstSheetTitle = metaData.sheets[0]?.properties?.title;
-        if (!firstSheetTitle) throw new Error('No sheets found in the document.');
+        // Use Apps Script backend instead of direct Google API
+        // This avoids needing the scary "spreadsheets" permission
+        const URL = GOOGLE_CONFIG.APPS_SCRIPT_URL;
+        if (!URL) throw new Error('Apps Script URL is not configured. Please set it up to view dashboards.');
 
-        // 2. Fetch the data from the first sheet
-        const dataRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(firstSheetTitle)}`, { headers: authHead });
-        if (!dataRes.ok) throw new Error('Failed to fetch data from the sheet.');
-        const sheetData = await dataRes.json();
+        const res = await fetch(URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'readExternalSheet',
+            externalSpreadsheetId: spreadsheetId
+          })
+        });
 
-        const rows = sheetData.values || [];
-        if (rows.length < 2) throw new Error('Not enough data found in the sheet (need headers + at least 1 row).');
+        if (!res.ok) throw new Error(`Backend error: ${res.statusText}`);
+        const result = await res.json();
+        
+        if (!result.success) throw new Error(result.error);
+        
+        const rows = result.data || [];
+        if (rows.length === 0) throw new Error('Sheet is empty or no data found.');
 
-        const parsedHeaders = rows[0];
+        // Extract headers from the first object
+        const parsedHeaders = Object.keys(rows[0] || {});
         setHeaders(parsedHeaders);
-
-        // Convert 2D array to array of objects
-        const parsedData = [];
-        for (let i = 1; i < rows.length; i++) {
-          const row = rows[i];
-          const obj = {};
-          parsedHeaders.forEach((header, idx) => {
-            obj[header] = row[idx] || '';
-          });
-          parsedData.push(obj);
-        }
-        setData(parsedData);
+        setData(rows);
       } catch (err) {
         console.error(err);
         setError(err.message);
