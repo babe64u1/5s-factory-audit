@@ -13,11 +13,20 @@
 import { GOOGLE_CONFIG } from '../config/google';
 
 /** Internal state */
-let _tokenData = null;
+let _tokenData = JSON.parse(localStorage.getItem('5s_googleToken')) || null;
 let _tokenClient = null;
 let _pendingResolve = null;
 let _pendingReject = null;
 let _initPromise = null; // singleton — only initialize once
+
+const _saveToken = (data) => {
+  _tokenData = data;
+  if (data) {
+    localStorage.setItem('5s_googleToken', JSON.stringify(data));
+  } else {
+    localStorage.removeItem('5s_googleToken');
+  }
+};
 
 /**
  * Wait for GIS script to fully load INCLUDING google.accounts.oauth2.
@@ -130,7 +139,7 @@ function _handleTokenResponse(tokenResponse) {
   }
 
   const expiresAt = Date.now() + (tokenResponse.expires_in - 60) * 1000;
-  _tokenData = { ...(_tokenData || {}), access_token: tokenResponse.access_token, expires_at: expiresAt };
+  _saveToken({ ...(_tokenData || {}), access_token: tokenResponse.access_token, expires_at: expiresAt });
 
   if (_pendingResolve) _pendingResolve(_tokenData);
   _pendingResolve = null;
@@ -183,7 +192,7 @@ export const signInWithGoogle = () => {
         const palette = ['#1a73e8', '#34a853', '#ea4335', '#fbbc04', '#4285f4', '#0f9d58'];
         const avatarColor = palette[(profile.email || '').charCodeAt(0) % palette.length];
 
-        _tokenData = {
+        _saveToken({
           ...tokenData,
           email: profile.email,
           name: profile.name,
@@ -191,7 +200,7 @@ export const signInWithGoogle = () => {
           sub: profile.sub,
           avatar: initials,
           avatarColor,
-        };
+        });
 
         settle(resolve, {
           accessToken: _tokenData.access_token,
@@ -245,7 +254,7 @@ export const signOut = () => {
   if (_tokenData?.access_token) {
     window.google?.accounts?.oauth2?.revoke(_tokenData.access_token);
   }
-  _tokenData = null;
+  _saveToken(null);
 };
 
 /** True if we have a non-expired cached token */
