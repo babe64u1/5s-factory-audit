@@ -10,6 +10,7 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
   const [data, setData] = useState([]);
   const [headers, setHeaders] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState('ALL');
+  const [selectedDepartment, setSelectedDepartment] = useState('ALL');
 
   useEffect(() => {
     async function fetchData() {
@@ -105,6 +106,35 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
     return Array.from(months).sort((a, b) => new Date(b) - new Date(a));
   }, [data, headers]);
 
+  // Identify Department column and extract available departments
+  const deptHeader = useMemo(() => {
+    return headers.find(h => h.toLowerCase().includes('departemen') || h.toLowerCase().includes('department'));
+  }, [headers]);
+
+  const availableDepartments = useMemo(() => {
+    if (!data.length || !deptHeader) return [];
+    const depts = new Set();
+    data.forEach(row => {
+      let val = row[deptHeader] || 'Unknown/Blank';
+      if (String(val).trim() === '') val = 'Unknown/Blank';
+      depts.add(val);
+    });
+    return Array.from(depts).sort();
+  }, [data, deptHeader]);
+
+  // Apply filters (Month and Department)
+  const filteredData = useMemo(() => {
+    return data.filter(row => {
+      const matchMonth = selectedMonth === 'ALL' || row._parsedMonth === selectedMonth;
+      
+      let rowDept = row[deptHeader] || 'Unknown/Blank';
+      if (String(rowDept).trim() === '') rowDept = 'Unknown/Blank';
+      const matchDept = selectedDepartment === 'ALL' || rowDept === selectedDepartment;
+      
+      return matchMonth && matchDept;
+    });
+  }, [data, selectedMonth, selectedDepartment, deptHeader]);
+
   // Extract latest 3 findings for Communication Card
   const latestFindings = useMemo(() => {
     if (title !== 'Communication Card' || !data.length) return [];
@@ -117,20 +147,37 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
     return sortedData.slice(0, 3);
   }, [data, title]);
 
-  // Apply filter
-  const filteredData = useMemo(() => {
-    if (selectedMonth === 'ALL') return data;
-    return data.filter(row => row._parsedMonth === selectedMonth);
-  }, [data, selectedMonth]);
+  // Top Contributors Chart logic
+  const topContributorsChart = useMemo(() => {
+    if (!filteredData.length || !headers.length) return null;
+    
+    // Find the name column
+    const nameHeader = headers.find(h => h.toLowerCase() === 'nama' || h.toLowerCase() === 'nama lengkap' || h.toLowerCase() === 'name' || h.toLowerCase() === 'auditor');
+    if (!nameHeader) return null;
 
-  // Analyze columns to find categorical data for charts (unique values > 1 and <= 20)
+    const counts = {};
+    filteredData.forEach(row => {
+      let val = row[nameHeader] || 'Unknown';
+      if (String(val).trim() === '') val = 'Unknown';
+      counts[val] = (counts[val] || 0) + 1;
+    });
+
+    const chartData = Object.keys(counts).map(key => ({
+      name: key,
+      value: counts[key]
+    })).sort((a, b) => b.value - a.value).slice(0, 10); // Show top 10
+
+    return { header: 'Top Contributors', chartData, isNameChart: true };
+  }, [filteredData, headers]);
+
+  // Analyze columns to find categorical data for other charts
   const chartsData = useMemo(() => {
     if (!filteredData.length || !headers.length) return [];
 
     const categoricalColumns = [];
     headers.forEach(header => {
-      // Skip obvious non-categorical columns
-      if (header.toLowerCase().includes('timestamp') || header.toLowerCase().includes('id') || header.toLowerCase().includes('name') || header.toLowerCase().includes('email')) {
+      // Skip obvious non-categorical columns and the name column (already handled)
+      if (header.toLowerCase().includes('timestamp') || header.toLowerCase().includes('id') || header.toLowerCase().includes('nama') || header.toLowerCase().includes('name') || header.toLowerCase().includes('email')) {
         return;
       }
 
@@ -141,9 +188,8 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
         }
       });
       
-      // If it's a good categorical column (like Department, Status, Rule Type)
+      // If it's a good categorical column
       if (uniqueValues.size > 1 && uniqueValues.size <= 20) {
-        // Count occurrences
         const counts = {};
         filteredData.forEach(row => {
           let val = row[header] || 'Unknown/Blank';
@@ -151,18 +197,57 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
           counts[val] = (counts[val] || 0) + 1;
         });
         
-        // Format for recharts
         const chartData = Object.keys(counts).map(key => ({
           name: key,
           value: counts[key]
         })).sort((a, b) => b.value - a.value);
 
-        categoricalColumns.push({ header, chartData });
+        categoricalColumns.push({ header, chartData, isNameChart: false });
       }
     });
 
-    return categoricalColumns.slice(0, 4); // Limit to top 4 best charts
-  }, [filteredData, headers]);
+    // Combine top contributors with the rest, limit total charts
+    const combined = [];
+    if (topContributorsChart) combined.push(topContributorsChart);
+    return combined.concat(categoricalColumns).slice(0, 4); // Show top 4 charts overall
+  }, [filteredData, headers, topContributorsChart]);
+
+  const renderTableCell = (value) => {
+    const strVal = String(value || '');
+    if (strVal.match(/^https?:\/\//i)) {
+      if (strVal.match(/\.(jpeg|jpg|gif|png)$/i) || strVal.includes('drive.google.com')) {
+        // Try to get a proper image preview if it's drive, otherwise just a link with icon
+        let thumbUrl = strVal;
+        if (strVal.includes('drive.google.com/file/d/')) {
+          const match = strVal.match(/\/d\/([a-zA-Z0-9_-]+)/);
+          if (match && match[1]) {
+             thumbUrl = `https://drive.google.com/uc?export=view&id=${match[1]}`;
+          }
+        } else if (strVal.includes('drive.google.com/open?id=')) {
+          const match = strVal.match(/id=([a-zA-Z0-9_-]+)/);
+          if (match && match[1]) {
+             thumbUrl = `https://drive.google.com/uc?export=view&id=${match[1]}`;
+          }
+        }
+        
+        return (
+          <a href={strVal} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[#29A9E0] hover:text-blue-800 transition-colors group">
+            <div className="w-10 h-10 rounded border border-gray-200 overflow-hidden bg-gray-100 flex items-center justify-center shrink-0">
+              <img src={thumbUrl} alt="Preview" className="w-full h-full object-cover group-hover:scale-110 transition-transform" onError={(e) => { e.target.onerror = null; e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z'/%3E%3C/svg%3E"; }} />
+            </div>
+            <span className="font-medium underline decoration-transparent group-hover:decoration-current">View Photo</span>
+          </a>
+        );
+      }
+      return (
+        <a href={strVal} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center gap-1">
+          <span className="material-symbols-outlined text-[14px]">link</span>
+          Open Link
+        </a>
+      );
+    }
+    return strVal;
+  };
 
   if (loading) {
     return (
@@ -198,21 +283,39 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
           <p className="text-sm text-[#6B6E8A] mt-1">Live data feed</p>
         </div>
 
-        {availableMonths.length > 0 && (
-          <div className="flex flex-col">
-            <label className="text-[10px] font-bold text-[#6B6E8A] uppercase tracking-wider mb-1">Filter By Month</label>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="px-4 py-2 bg-white border border-[#E0E0EC] rounded-lg text-sm font-bold text-[#353750] shadow-sm hover:border-gray-400 focus:outline-none transition-colors"
-            >
-              <option value="ALL">All Time</option>
-              {availableMonths.map(m => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-4">
+          {availableDepartments.length > 0 && (
+            <div className="flex flex-col">
+              <label className="text-[10px] font-bold text-[#6B6E8A] uppercase tracking-wider mb-1">Filter By Department</label>
+              <select
+                value={selectedDepartment}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+                className="px-4 py-2 bg-white border border-[#E0E0EC] rounded-lg text-sm font-bold text-[#353750] shadow-sm hover:border-gray-400 focus:outline-none transition-colors max-w-[200px]"
+              >
+                <option value="ALL">All Departments</option>
+                {availableDepartments.map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {availableMonths.length > 0 && (
+            <div className="flex flex-col">
+              <label className="text-[10px] font-bold text-[#6B6E8A] uppercase tracking-wider mb-1">Filter By Month</label>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="px-4 py-2 bg-white border border-[#E0E0EC] rounded-lg text-sm font-bold text-[#353750] shadow-sm hover:border-gray-400 focus:outline-none transition-colors"
+              >
+                <option value="ALL">All Time</option>
+                {availableMonths.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Latest 3 Findings (Only for Communication Card) */}
@@ -276,11 +379,12 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {chartsData.map((col, idx) => (
             <div key={col.header} className="bg-white border border-[#E0E0EC] rounded-xl shadow-sm p-4 flex flex-col">
-              <h3 className="text-[#353750] font-bold text-sm uppercase tracking-wider mb-4 border-b border-[#E0E0EC] pb-2">
-                {col.header} Breakdown
+              <h3 className="text-[#353750] font-bold text-sm uppercase tracking-wider mb-4 border-b border-[#E0E0EC] pb-2 flex items-center gap-2">
+                {col.isNameChart ? <span className="material-symbols-outlined text-[#F05731] text-lg">groups</span> : null}
+                {col.header} {col.isNameChart ? 'Breakdown' : 'Breakdown'}
               </h3>
               <div className="h-64 w-full">
-                {idx % 2 === 0 ? (
+                {idx % 2 === 0 || col.isNameChart ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={col.chartData} margin={{ top: 5, right: 30, left: 0, bottom: 30 }}>
                       <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={0} angle={-45} textAnchor="end" height={60} />
@@ -324,10 +428,11 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
 
       {/* Raw Data Table */}
       <div className="bg-white border border-[#E0E0EC] rounded-xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-[#E0E0EC]">
+        <div className="p-4 border-b border-[#E0E0EC] flex items-center gap-2">
+          <span className="material-symbols-outlined text-[#F05731]">table_chart</span>
           <h3 className="text-[#353750] font-bold text-sm uppercase tracking-wider">Recent Submissions ({filteredData.length})</h3>
         </div>
-        <div className="overflow-x-auto max-h-[400px]">
+        <div className="overflow-x-auto max-h-[600px]">
           <table className="w-full text-left text-xs text-[#353750] whitespace-nowrap">
             <thead className="bg-[#F4F4F6] sticky top-0 shadow-sm z-10">
               <tr>
@@ -340,7 +445,9 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
               {filteredData.slice().reverse().slice(0, 100).map((row, idx) => (
                 <tr key={idx} className="hover:bg-[#F9F9FB] transition-colors">
                   {headers.map(h => (
-                    <td key={h} className="px-4 py-3 truncate max-w-[200px]">{row[h]}</td>
+                    <td key={h} className="px-4 py-3 max-w-[300px]">
+                      {renderTableCell(row[h])}
+                    </td>
                   ))}
                 </tr>
               ))}
