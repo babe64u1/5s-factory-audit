@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getValidToken } from '../services/googleAuth';
+import { GOOGLE_CONFIG } from '../config/google';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const COLORS = ['#29A9E0', '#3DAA72', '#FAB931', '#F05731', '#353750', '#9B51E0', '#2D9CDB', '#F2C94C', '#EB5757', '#27AE60'];
