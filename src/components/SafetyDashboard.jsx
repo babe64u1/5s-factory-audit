@@ -12,6 +12,7 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
   const [headers, setHeaders] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState('ALL');
   const [selectedDepartment, setSelectedDepartment] = useState('ALL');
+  const [activeImage, setActiveImage] = useState(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -290,12 +291,16 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
         }
         
         return (
-          <a href={strVal} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[#29A9E0] hover:text-blue-800 transition-colors group">
+          <button
+            type="button"
+            onClick={() => setActiveImage({ src: thumbUrl, original: strVal })}
+            className="flex items-center gap-2 text-[#29A9E0] hover:text-blue-800 transition-colors group text-left border-none bg-transparent cursor-pointer"
+          >
             <div className="w-10 h-10 rounded border border-gray-200 overflow-hidden bg-gray-100 flex items-center justify-center shrink-0">
               <img src={thumbUrl} alt="Preview" className="w-full h-full object-cover group-hover:scale-110 transition-transform" onError={(e) => { e.target.onerror = null; e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z'/%3E%3C/svg%3E"; }} />
             </div>
             <span className="font-medium underline decoration-transparent group-hover:decoration-current">View Photo</span>
-          </a>
+          </button>
         );
       }
       return (
@@ -536,6 +541,49 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
           </table>
         </div>
       </div>
+
+      {/* Image Modal Popup */}
+      {activeImage && (
+        <div 
+          className="fixed inset-0 bg-black/75 flex items-center justify-center z-[100] p-4 backdrop-blur-sm transition-all"
+          onClick={() => setActiveImage(null)}
+        >
+          <div 
+            className="relative max-w-4xl max-h-[90vh] bg-white rounded-xl overflow-hidden shadow-2xl p-2 flex flex-col" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button 
+              onClick={() => setActiveImage(null)} 
+              className="absolute top-4 right-4 bg-black/50 hover:bg-black/80 text-white rounded-full p-2 flex items-center justify-center transition-colors z-10"
+            >
+              <span className="material-symbols-outlined text-sm">close</span>
+            </button>
+            
+            <img 
+              src={activeImage.src} 
+              alt="Audit Finding" 
+              className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-inner" 
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%239ca3af'%3E%3Cpath d='M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z'/%3E%3C/svg%3E";
+              }}
+            />
+            
+            <div className="flex justify-between items-center px-4 py-2 mt-2">
+              <span className="text-xs text-gray-500">Image Preview</span>
+              <a 
+                href={activeImage.original} 
+                target="_blank" 
+                rel="noreferrer" 
+                className="text-xs text-[#29A9E0] hover:underline flex items-center gap-1 font-bold"
+              >
+                <span className="material-symbols-outlined text-xs">open_in_new</span>
+                Open original in new tab
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
