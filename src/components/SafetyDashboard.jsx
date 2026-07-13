@@ -211,6 +211,7 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
     if (!filteredData.length || !headers.length) return null;
 
     const nameHeader = headers.find(h => h.toLowerCase() === 'nama' || h.toLowerCase() === 'nama lengkap' || h.toLowerCase() === 'name' || h.toLowerCase() === 'auditor');
+    const timestampHeader = headers.find(h => h.toLowerCase().includes('timestamp') || h.toLowerCase().includes('waktu') || h.toLowerCase().includes('tanggal') || h.toLowerCase().includes('date'));
     
     const trendMap = {}; 
     const isMonthly = selectedMonth === 'ALL';
@@ -229,24 +230,33 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
       }
 
       if (!trendMap[periodKey]) {
-        trendMap[periodKey] = { total: 0, uniqueNames: new Set(), dateObj: row._parsedDateObj };
+        trendMap[periodKey] = { total: 0, uniqueSubmissions: new Set(), dateObj: row._parsedDateObj };
       }
       
       trendMap[periodKey].total += 1;
       
-      let nameVal = 'Unknown';
-      if (nameHeader) {
-         nameVal = row[nameHeader] || 'Unknown';
-         if (String(nameVal).trim() === '') nameVal = 'Unknown';
+      let submissionId = 'Unknown';
+      if (timestampHeader) {
+         submissionId = String(row[timestampHeader] || '').trim();
+         if (nameHeader) {
+            submissionId += '_' + String(row[nameHeader] || '').trim();
+         }
+      } else {
+         submissionId = JSON.stringify(row); // Fallback
       }
-      trendMap[periodKey].uniqueNames.add(nameVal);
+      
+      if (submissionId !== 'Unknown' && submissionId !== '_') {
+        trendMap[periodKey].uniqueSubmissions.add(submissionId);
+      } else {
+        trendMap[periodKey].uniqueSubmissions.add(Math.random());
+      }
     });
 
     const chartData = Object.keys(trendMap).map(key => {
       return {
         period: key,
         total: trendMap[key].total,
-        unique: trendMap[key].uniqueNames.size,
+        unique: trendMap[key].uniqueSubmissions.size,
         dateObj: trendMap[key].dateObj
       };
     });
@@ -442,7 +452,7 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
                 <Tooltip cursor={{ fill: '#F4F4F6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
                 <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="top" height={36}/>
                 <Bar dataKey="total" fill="#29A9E0" name="Total Submissions" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="unique" fill="#F05731" name="Unique Auditors" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="unique" fill="#F05731" name="Unique Submissions" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
