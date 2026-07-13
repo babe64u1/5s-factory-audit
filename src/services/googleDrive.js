@@ -86,7 +86,7 @@ export async function uploadPhoto(file, fileName) {
   );
 
   // Direct image URL for embedding
-  const viewUrl = `https://drive.google.com/uc?export=view&id=${fileData.id}`;
+  const viewUrl = `https://lh3.googleusercontent.com/d/${fileData.id}`;
   const thumbnailUrl = fileData.thumbnailLink || viewUrl;
 
   return {

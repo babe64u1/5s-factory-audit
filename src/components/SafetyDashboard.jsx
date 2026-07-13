@@ -275,18 +275,18 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
   const renderTableCell = (value) => {
     const strVal = String(value || '');
     if (strVal.match(/^https?:\/\//i)) {
-      if (strVal.match(/\.(jpeg|jpg|gif|png)$/i) || strVal.includes('drive.google.com')) {
+      if (strVal.match(/\.(jpeg|jpg|gif|png)$/i) || strVal.includes('drive.google.com') || strVal.includes('googleusercontent.com')) {
         // Try to get a proper image preview if it's drive, otherwise just a link with icon
         let thumbUrl = strVal;
         if (strVal.includes('drive.google.com/file/d/')) {
           const match = strVal.match(/\/d\/([a-zA-Z0-9_-]+)/);
           if (match && match[1]) {
-             thumbUrl = `https://drive.google.com/uc?export=view&id=${match[1]}`;
+             thumbUrl = `https://lh3.googleusercontent.com/d/${match[1]}`;
           }
         } else if (strVal.includes('drive.google.com/open?id=')) {
           const match = strVal.match(/id=([a-zA-Z0-9_-]+)/);
           if (match && match[1]) {
-             thumbUrl = `https://drive.google.com/uc?export=view&id=${match[1]}`;
+             thumbUrl = `https://lh3.googleusercontent.com/d/${match[1]}`;
           }
         }
         
