@@ -268,9 +268,32 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
 
     return {
        title: isMonthly ? 'Monthly Submission Trend' : 'Daily Submission Trend',
-       data: chartData
-    };
+        data: chartData
+     };
   }, [filteredData, headers, selectedMonth]);
+
+  // Headers to display in the table
+  const displayHeaders = useMemo(() => {
+    if (title === 'Communication Card') {
+      const allowed = [
+        'Nama Lengkap Anda',
+        'Nama Perusahaan',
+        'Departemen',
+        'Tanggal temuan',
+        'Waktu temuan',
+        'Lokasi temuan',
+        'Kategori temuan',
+        'Jelaskan secara singkat temuan Anda',
+        'Apa tindakan langsung yang Anda lakukan untuk meresponnya?',
+        'Silakan unggah disini foto temuan Anda',
+        'Apakah temuan ini telah diselesaikan?',
+        'Silakan unggah disini foto penyelesaian masalah dalam temuan Anda'
+      ].map(h => h.toLowerCase().trim());
+
+      return headers.filter(h => allowed.includes(h.toLowerCase().trim()));
+    }
+    return headers;
+  }, [headers, title]);
 
   const renderTableCell = (value) => {
     const strVal = String(value || '');
@@ -522,7 +545,7 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
           <table className="w-full text-left text-xs text-[#353750] whitespace-nowrap">
             <thead className="bg-[#F4F4F6] sticky top-0 shadow-sm z-10">
               <tr>
-                {headers.map(h => (
+                {displayHeaders.map(h => (
                   <th key={h} className="px-4 py-3 font-bold uppercase tracking-wider border-b border-[#E0E0EC]">{h}</th>
                 ))}
               </tr>
@@ -530,7 +553,7 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
             <tbody className="divide-y divide-[#E0E0EC]">
               {filteredData.slice().reverse().slice(0, 100).map((row, idx) => (
                 <tr key={idx} className="hover:bg-[#F9F9FB] transition-colors">
-                  {headers.map(h => (
+                  {displayHeaders.map(h => (
                     <td key={h} className="px-4 py-3 max-w-[300px]">
                       {renderTableCell(row[h])}
                     </td>
