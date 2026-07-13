@@ -146,7 +146,10 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
     if (!filteredData.length || !headers.length) return null;
     
     // Find the name column
-    const nameHeader = headers.find(h => h.toLowerCase() === 'nama' || h.toLowerCase() === 'nama lengkap' || h.toLowerCase() === 'name' || h.toLowerCase() === 'auditor');
+    const nameHeader = headers.find(h => {
+      const low = h.toLowerCase();
+      return low === 'nama' || low.includes('nama lengkap') || low === 'name' || low.includes('auditor');
+    });
     if (!nameHeader) return null;
 
     const counts = {};
@@ -210,8 +213,10 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
   const trendChartData = useMemo(() => {
     if (!filteredData.length || !headers.length) return null;
 
-    const nameHeader = headers.find(h => h.toLowerCase() === 'nama' || h.toLowerCase() === 'nama lengkap' || h.toLowerCase() === 'name' || h.toLowerCase() === 'auditor');
-    const timestampHeader = headers.find(h => h.toLowerCase().includes('timestamp') || h.toLowerCase().includes('waktu') || h.toLowerCase().includes('tanggal') || h.toLowerCase().includes('date'));
+    const nameHeader = headers.find(h => {
+      const low = h.toLowerCase();
+      return low === 'nama' || low.includes('nama lengkap') || low === 'name' || low.includes('auditor');
+    });
     
     const trendMap = {}; 
     const isMonthly = selectedMonth === 'ALL';
@@ -230,33 +235,24 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
       }
 
       if (!trendMap[periodKey]) {
-        trendMap[periodKey] = { total: 0, uniqueSubmissions: new Set(), dateObj: row._parsedDateObj };
+        trendMap[periodKey] = { total: 0, uniqueNames: new Set(), dateObj: row._parsedDateObj };
       }
       
       trendMap[periodKey].total += 1;
       
-      let submissionId = 'Unknown';
-      if (timestampHeader) {
-         submissionId = String(row[timestampHeader] || '').trim();
-         if (nameHeader) {
-            submissionId += '_' + String(row[nameHeader] || '').trim();
-         }
-      } else {
-         submissionId = JSON.stringify(row); // Fallback
+      let nameVal = 'Unknown';
+      if (nameHeader) {
+         nameVal = row[nameHeader] || 'Unknown';
+         if (String(nameVal).trim() === '') nameVal = 'Unknown';
       }
-      
-      if (submissionId !== 'Unknown' && submissionId !== '_') {
-        trendMap[periodKey].uniqueSubmissions.add(submissionId);
-      } else {
-        trendMap[periodKey].uniqueSubmissions.add(Math.random());
-      }
+      trendMap[periodKey].uniqueNames.add(nameVal);
     });
 
     const chartData = Object.keys(trendMap).map(key => {
       return {
         period: key,
         total: trendMap[key].total,
-        unique: trendMap[key].uniqueSubmissions.size,
+        unique: trendMap[key].uniqueNames.size,
         dateObj: trendMap[key].dateObj
       };
     });
