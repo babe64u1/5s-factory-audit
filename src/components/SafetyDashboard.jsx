@@ -206,6 +206,65 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
     return combined.concat(categoricalColumns).slice(0, 4); // Show top 4 charts overall
   }, [filteredData, headers, topContributorsChart]);
 
+  // Trend Chart Data
+  const trendChartData = useMemo(() => {
+    if (!filteredData.length || !headers.length) return null;
+
+    const nameHeader = headers.find(h => h.toLowerCase() === 'nama' || h.toLowerCase() === 'nama lengkap' || h.toLowerCase() === 'name' || h.toLowerCase() === 'auditor');
+    
+    const trendMap = {}; 
+    const isMonthly = selectedMonth === 'ALL';
+
+    filteredData.forEach(row => {
+      let periodKey = 'Unknown';
+      if (isMonthly) {
+        periodKey = row._parsedMonth || 'Unknown';
+      } else {
+        if (row._parsedDateObj) {
+          // Format as DD MMM YYYY for daily trend
+          periodKey = row._parsedDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        } else {
+          periodKey = 'Unknown Date';
+        }
+      }
+
+      if (!trendMap[periodKey]) {
+        trendMap[periodKey] = { total: 0, uniqueNames: new Set(), dateObj: row._parsedDateObj };
+      }
+      
+      trendMap[periodKey].total += 1;
+      
+      let nameVal = 'Unknown';
+      if (nameHeader) {
+         nameVal = row[nameHeader] || 'Unknown';
+         if (String(nameVal).trim() === '') nameVal = 'Unknown';
+      }
+      trendMap[periodKey].uniqueNames.add(nameVal);
+    });
+
+    const chartData = Object.keys(trendMap).map(key => {
+      return {
+        period: key,
+        total: trendMap[key].total,
+        unique: trendMap[key].uniqueNames.size,
+        dateObj: trendMap[key].dateObj
+      };
+    });
+
+    // Sort chronologically
+    chartData.sort((a, b) => {
+      if (!a.dateObj && !b.dateObj) return 0;
+      if (!a.dateObj) return -1;
+      if (!b.dateObj) return 1;
+      return a.dateObj - b.dateObj;
+    });
+
+    return {
+       title: isMonthly ? 'Monthly Submission Trend' : 'Daily Submission Trend',
+       data: chartData
+    };
+  }, [filteredData, headers, selectedMonth]);
+
   const renderTableCell = (value) => {
     const strVal = String(value || '');
     if (strVal.match(/^https?:\/\//i)) {
@@ -364,6 +423,28 @@ function SpreadsheetDashboard({ spreadsheetId, title }) {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Trend Chart */}
+      {trendChartData && trendChartData.data.length > 0 && (
+        <div className="bg-white border border-[#E0E0EC] rounded-xl shadow-sm p-4 mb-8">
+          <h3 className="text-[#353750] font-bold text-sm uppercase tracking-wider mb-4 border-b border-[#E0E0EC] pb-2 flex items-center gap-2">
+            <span className="material-symbols-outlined text-[#29A9E0] text-lg">trending_up</span>
+            {trendChartData.title}
+          </h3>
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={trendChartData.data} margin={{ top: 5, right: 30, left: 0, bottom: 30 }}>
+                <XAxis dataKey="period" tick={{ fontSize: 10 }} interval={0} angle={-45} textAnchor="end" height={60} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                <Tooltip cursor={{ fill: '#F4F4F6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                <Legend wrapperStyle={{ fontSize: '12px' }} verticalAlign="top" height={36}/>
+                <Bar dataKey="total" fill="#29A9E0" name="Total Submissions" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="unique" fill="#F05731" name="Unique Auditors" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}
